@@ -1,13 +1,15 @@
 
 import MenuNavigation from './components/Menu/Menu';
-import './App.css'
+import GenerationArticle from './pages/article';
+import styles from './App.module.scss';
 
 function App() {
 
   return (
-    <>
+    <div className={styles.app}>
         <MenuNavigation />
-    </>
+        <GenerationArticle />
+    </div>
   )
 }
 
