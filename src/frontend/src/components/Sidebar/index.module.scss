@@ -1,0 +1,23 @@
+.sidebar {
+    width: auto;
+    height: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-left: 330px;
+    margin-top: 10%;
+
+    .generate_outline {
+        width: 80px;
+        margin-top: 30px;
+        align-self: flex-end;
+    }
+
+    .outline_gen {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+}
