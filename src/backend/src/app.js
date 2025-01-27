@@ -1,12 +1,20 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { Socket } from 'dgram';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 配置 dotenv，这行必须在使用任何环境变量之前
-dotenv.config();
-
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// 添加一些调试日志
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY);
+console.log('OPENAI_BASE_URL:', process.env.OPENAI_BASE_URL);
 const app = express();
 const PORT = 3000;
 
@@ -32,27 +40,11 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');  
     // 调用 main 函数并传递 message
 
-    const intervalId = setInterval(async () => {
-        const result = await main(message);
-        res.write(`event: QuoteEvent\n`);
-        res.write(`data: {message: "${result}"}\n\n`);
-
-        if (result.includes('Stream Ended')) {
-            clearInterval(intervalId);
-            res.write(`event: Close\n`);
-            res.write(`data: {"message": "Stream Ended"}\n\n`);
-            res.end(); // Ensure the response is closed
-        }
-    }, 100);
-    // try {
-
-    //     res.json({ response });
-    // } catch (err) {
-    //     console.error('处理请求是出错：', err);
-    //     res.status(500).json({ error: '内部服务器错误' });
-    // }
+    await main(message, res);
+    
     req.on('close', () => {
         clearInterval(intervalId);
         res.end();
@@ -82,25 +74,45 @@ app.post('/api/chat/paper/stream', async (req, res) => {
 
 // Image input:
 async function main(message) {
-    const response = await openai.chat.completions.create({
-        apiKey: process.env['ARK_API_KEY'],
-        messages: [
-            {
-                role: 'user',
-                content: [
-                    { type: 'text', text: `${message}` },
-                    {
-                        type: 'image_url',
-                        image_url: {
-                            url: 'https://ark-project.tos-cn-beijing.ivolces.com/images/view.jpeg',
+    try {
+        const response = await openai.chat.completions.create({
+            apiKey: process.env['ARK_API_KEY'],
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: `${message}` },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: 'https://ark-project.tos-cn-beijing.ivolces.com/images/view.jpeg',
+                            },
                         },
-                    },
-                ],
-            },
-        ],
-        model: 'ep-20241210163416-fpvzh',
-    });
-    return response.choices[0].message.content; // 确保返回内容
+                    ],
+                },
+            ],
+            model: 'ep-20241210163416-fpvzh',
+            stream: true
+        });
+
+        for await (const chunk of response) {
+            if (chunk.choices[0].delta.content) {
+                // 发送SSE消息
+                res.write(`data: ${JSON.stringify({
+                    content: chunk.choices[0].delta.content,
+                    isLastMessage: chunk.choices[0].finish_reason === 'stop'
+                })}\n\n`);
+            }
+            // 如果是最后一条信息
+            if (chunk.choices[0].finish_reason === 'stop') {
+                res.end();
+            }
+        }
+    } catch (error) {
+        console.log('处理消息时出错: ', error);
+        res.write(`data: ${JSON.stringify({ error: '处理消息时出错' })}`)
+        res.end();
+    }
 }
 
 // 启动服务器

@@ -40,12 +40,13 @@ const prompt_paper = `您是一位在学术写作领域极具权威性的专家�
 始终严格遵守学术道德和相关法律规范，坚决杜绝任何抄袭或剽窃他人成果的行为。确保论文的原创性，所有观点和内容均为独立创作或基于合法引用。引用他人成果时，需按照规范进行标注，尊重知识产权。
 请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。`;
 
-const DragAndDropDemo = ({ value, setOutline }: IOutline) => {
+const DragAndDropDemo = () => {
+  const inputVal = useOutlineStore((state) => state.inputVal);  // 从 store 获取值
   const [items, setItems] = useState<{ id: string; content: string; description: string }[]>([]);
   const [showBtn, setShowBtn] = useState<boolean>(false);
   const updatePaper = useOutlineStore(state => state.updatePaper);
   // 分解返回的大纲
-  const sections = (value.split(/(?<=\n)(?=### )/).filter(section => section.trim() !== '')); // 按照标题分割
+  const sections = (inputVal.split(/(?<=\n)(?=### )/).filter(section => section.trim() !== '')); // 按照标题分割
   const processedSections = sections.splice(2);
   // 更新 items 的描述
   const updateItemsDescription = () => {
@@ -63,7 +64,7 @@ const DragAndDropDemo = ({ value, setOutline }: IOutline) => {
       })
     );
   };
-
+  
   // 获取论文
   const genPaper = async () => {
     try {
@@ -76,12 +77,11 @@ const DragAndDropDemo = ({ value, setOutline }: IOutline) => {
 
   // 在组件渲染时调用更新描述的函数
   useEffect(() => {
-    updateItemsDescription();
-    if(value !== '') {
+    if (inputVal) {
+      updateItemsDescription();
       setShowBtn(true);
     }
-    console.log('value: ', value);
-  }, [value]);
+  }, [inputVal]);
 
   // 定义 handleOnDragEnd 函数
   const handleOnDragEnd = (result) => {

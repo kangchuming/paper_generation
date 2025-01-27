@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useOutlineStore } from '@store/outline';
 
@@ -8,11 +7,12 @@ const API_BASE_URL = 'http://localhost:3000';
 export async function fetchOutline(message: string) {
     try {
         const updateInputVal = useOutlineStore.getState().updateInputVal;
+        let isFirstMessage = true;  // 用于追踪是否是第一条消息
 
         await fetchEventSource(`${API_BASE_URL}/api/chat/stream`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'text/event-stream',
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify({ message }),
 
@@ -20,16 +20,31 @@ export async function fetchOutline(message: string) {
                 const text = event.data;
                 console.log('Received: ', text);
 
-                updateInputVal((prevInputVal) => prevInputVal + text);
+                if(text === '[DONE]') {
+                    return;
+                }
+
+                // 如果是第一条消息， 清空之前的内容
+                if(isFirstMessage) {
+                    updateInputVal(() => text);
+                    isFirstMessage = false;
+                } else {
+                    updateInputVal((prevInputVal) => prevInputVal + text);
+                }
             },
 
             onerror(error) {
                 console.error('Error occurred:', error);
+                // 可以在这里添加错误提示UI
+                updateInputVal((prevInputVal) => 
+                    prevInputVal + '\n\n[错误：连接中断，请重试]'
+                );
+                throw error; // 或者根据需要处理错误
             },
 
             onclose() {
                 console.log('Connection closed');
-            }
+            },
         })
 
     } catch (err) {
