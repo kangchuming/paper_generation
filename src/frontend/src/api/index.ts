@@ -7,7 +7,9 @@ const API_BASE_URL = 'http://localhost:3000';
 export async function fetchOutline(message: string) {
     try {
         const updateInputVal = useOutlineStore.getState().updateInputVal;
-        let isFirstMessage = true;  // 用于追踪是否是第一条消息
+
+        // 在开始新的请求时清空内容
+        updateInputVal(() => '');
 
         await fetchEventSource(`${API_BASE_URL}/api/chat/stream`, {
             method: 'POST',
@@ -16,30 +18,37 @@ export async function fetchOutline(message: string) {
             },
             body: JSON.stringify({ message }),
 
+            onopen(response) {
+                return new Promise<void>((resolve, reject) => {
+                    if (response.ok && response.status === 200) {
+                        console.log('Connection opened successfully');
+                        resolve();
+                    } else {
+                        reject(new Error(`Failed to open connection: ${response.status} ${response.statusText}`));
+                    }
+                });
+            },
+
             onmessage(event) {
                 const text = event.data;
-                console.log('Received: ', text);
 
-                if(text === '[DONE]') {
-                    return;
-                }
+                try {
+                    if (text === '[DONE]') {
+                        return;
+                    }
 
-                // 如果是第一条消息， 清空之前的内容
-                if(isFirstMessage) {
-                    updateInputVal(() => text);
-                    isFirstMessage = false;
-                } else {
                     updateInputVal((prevInputVal) => prevInputVal + text);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
                 }
             },
 
             onerror(error) {
-                console.error('Error occurred:', error);
-                // 可以在这里添加错误提示UI
+                console.error('Stream error:', error);
                 updateInputVal((prevInputVal) => 
                     prevInputVal + '\n\n[错误：连接中断，请重试]'
                 );
-                throw error; // 或者根据需要处理错误
+                throw error;
             },
 
             onclose() {

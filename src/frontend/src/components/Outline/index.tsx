@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import debounce from 'lodash/debounce';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Input, Button } from 'antd';
 import { fetchPaper } from '@api/index.ts';
@@ -44,27 +45,43 @@ const DragAndDropDemo = () => {
   const inputVal = useOutlineStore((state) => state.inputVal);  // 从 store 获取值
   const [items, setItems] = useState<{ id: string; content: string; description: string }[]>([]);
   const [showBtn, setShowBtn] = useState<boolean>(false);
-  const updatePaper = useOutlineStore(state => state.updatePaper);
-  // 分解返回的大纲
-  const sections = (inputVal.split(/(?<=\n)(?=### )/).filter(section => section.trim() !== '')); // 按照标题分割
-  const processedSections = sections.splice(2);
-  // 更新 items 的描述
-  const updateItemsDescription = () => {
-    setItems(
-      processedSections.map((section, index) => {
-        const lines = section.split('\n').filter(line => line.trim() !== ''); // 按换行符分割并去除空行
-        const content = lines[0].trim(); // 第一行作为标题
-        const description = lines.slice(1).join('\n').trim(); // 剩余行作为描述
+
+  // 使用 useMemo 缓存当前完整的章节
+  const currentSections = useMemo(() => {
+    // 等待接收到完整的标题行（以 ### 开头）再处理
+    const sections = inputVal.split(/(?<=\n)(?=### )/).filter(section => section.trim() !== '');
+    return sections.length >= 3 ? sections.slice(2) : [];
+  }, [inputVal]);
+
+  // 使用 useCallback 包装更新函数
+  const updateItemsDescription = useCallback(() => {
+    // 只有当有新的完整章节时才更新
+    if (currentSections.length > 0) {
+      const newItems = currentSections.map((section, index) => {
+        // 检查章节是否包含完整的标题和描述
+        const lines = section.split('\n').filter(line => line.trim() !== '');
+
+        // 确保至少有标题行
+        if (lines.length === 0) return null;
+
+        const content = lines[0].trim();
+        const description = lines.slice(1).join('\n').trim();
 
         return {
-          id: (index + 1).toString(), // 确保 id 是字符串
+          id: (index + 1).toString(),
           content,
           description
         };
-      })
-    );
-  };
-  
+      }).filter((item): item is { id: string; content: string; description: string } => item !== null);
+
+      // 只有当有有效的项目时才更新状态
+      if (newItems.length > 0) {
+        setItems(newItems);
+        setShowBtn(true);
+      }
+    }
+  }, [currentSections]);
+
   // 获取论文
   const genPaper = async () => {
     try {
@@ -75,13 +92,11 @@ const DragAndDropDemo = () => {
     }
   }
 
-  // 在组件渲染时调用更新描述的函数
-  useEffect(() => {
-    if (inputVal) {
-      updateItemsDescription();
-      setShowBtn(true);
-    }
-  }, [inputVal]);
+  // 使用防抖处理频繁更新
+  const debouncedUpdate = useMemo(
+    () => debounce(updateItemsDescription, 300),
+    [updateItemsDescription]
+  );
 
   // 定义 handleOnDragEnd 函数
   const handleOnDragEnd = (result) => {
@@ -93,6 +108,18 @@ const DragAndDropDemo = () => {
 
     setItems(newItems);
   };
+
+  useEffect(() => {
+    if (inputVal) {
+      debouncedUpdate();
+    }
+
+    return () => {
+      debouncedUpdate.cancel();
+    };
+  }, [inputVal, debouncedUpdate]);
+
+
 
   return (
     <>
