@@ -5,7 +5,6 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { Socket } from 'dgram';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,17 +37,22 @@ app.post('/api/chat/stream', async (req, res) => {
     const { message } = req.body;
     // 设置响应头以支持 SSE
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');  
-    // 调用 main 函数并传递 message
-
-    await main(message, res);
+    res.setHeader('Access-Control-Allow-Origin', '*');
     
-    req.on('close', () => {
-        clearInterval(intervalId);
+    try {
+        // 移除不必要的 response 写入，直接调用 main
+        await main(message, res);
+    } catch (error) {
+        console.error('处理请求出错：', error);
+        res.write(`data: ${JSON.stringify({ error: '内部服务器错误' })}\n\n`);
         res.end();
-    })
+    }
+
+    req.on('close', () => {
+        res.end();
+    });
 });
 
 // 定义处理 POST 请求的路由
@@ -62,10 +66,10 @@ app.post('/api/chat/paper/stream', async (req, res) => {
 
     // 调用 main 函数并传递 message
     try {
-        const response = await main(message);
+        const response = await main(message, res);
         res.write(`data: ${JSON.stringify({ response })}\n\n`); // 发送数据
-        res.flush(); // 确保数据立即发送
-    } catch (err) {
+        // res.flush(); // 确保数据立即发送
+    } catch (error) {
         console.error('处理请求是出错：', err);
         res.status(500).json({ error: '内部服务器错误' });
     }
@@ -73,44 +77,25 @@ app.post('/api/chat/paper/stream', async (req, res) => {
 
 
 // Image input:
-async function main(message) {
+async function main(message, res) {
     try {
-        const response = await openai.chat.completions.create({
-            apiKey: process.env['ARK_API_KEY'],
+        const stream = await openai.chat.completions.create({
             messages: [
-                {
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: `${message}` },
-                        {
-                            type: 'image_url',
-                            image_url: {
-                                url: 'https://ark-project.tos-cn-beijing.ivolces.com/images/view.jpeg',
-                            },
-                        },
-                    ],
-                },
+                { role: 'user', content: message },
             ],
-            model: 'ep-20241210163416-fpvzh',
-            stream: true
+            model: 'ep-20250207153327-wrffm',
+            stream: true,
         });
-
-        for await (const chunk of response) {
-            if (chunk.choices[0].delta.content) {
-                // 发送SSE消息
-                res.write(`data: ${JSON.stringify({
-                    content: chunk.choices[0].delta.content,
-                    isLastMessage: chunk.choices[0].finish_reason === 'stop'
-                })}\n\n`);
-            }
-            // 如果是最后一条信息
-            if (chunk.choices[0].finish_reason === 'stop') {
-                res.end();
+        for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+                res.write(`data: ${JSON.stringify({ content: content, isLastMessage: chunk.choices[0].finish_reason === 'stop' })}\n\n`);
             }
         }
+        res.end();
     } catch (error) {
-        console.log('处理消息时出错: ', error);
-        res.write(`data: ${JSON.stringify({ error: '处理消息时出错' })}`)
+        console.error('处理消息时出错: ', error);
+        res.write(`data: ${JSON.stringify({ error: '处理消息时出错' })}\n\n`);
         res.end();
     }
 }

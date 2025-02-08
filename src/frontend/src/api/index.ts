@@ -30,8 +30,10 @@ export async function fetchOutline(message: string) {
             },
 
             onmessage(event) {
+                if(event.event === 'FatalError') {
+                    throw new Error(event.data);
+                }
                 const text = event.data;
-
                 try {
                     if (text === '[DONE]') {
                         return;
