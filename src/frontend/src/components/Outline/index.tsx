@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import debounce from 'lodash/debounce';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Input, Button } from 'antd';
 import { fetchPaper } from '@api/index.ts';
 import { useOutlineStore } from '@store/outline';
 import styles from './index.module.scss'; // 引入样式
+import { section, title, use } from 'framer-motion/client';
 
 const { TextArea } = Input;
 
@@ -41,140 +42,265 @@ const prompt_paper = `您是一位在学术写作领域极具权威性的专家�
 始终严格遵守学术道德和相关法律规范，坚决杜绝任何抄袭或剽窃他人成果的行为。确保论文的原创性，所有观点和内容均为独立创作或基于合法引用。引用他人成果时，需按照规范进行标注，尊重知识产权。
 请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。`;
 
-interface Section {
+// 定义文章
+interface Article {
   id: string;
-  level: number;
-  content: string;
-  description: string;
-  children: Section[];
+  title: string;
+  chapters: Chapter[];
 }
 
-const useStreamOutlineProcessor = () => {
-  const [sections, setSections] = useState<Section[]>([]);
-  const bufferRef = useRef('');  // 用于累积字符
-  const currentLineRef = useRef(''); // 用于累积当前行
-  const currentL1Ref = useRef<Section | null>(null);
-  const currentL2Ref = useRef<Section | null>(null);
+// 定义章节
+interface Chapter {
+  id: string;
+  title: string;
+  sections: Section[];
+  isComplete: boolean;
+}
 
-  // 处理完整的行
-  const processLine = useCallback((line: string) => {
-    const trimmedLine = line.trim();
-    
-    if (trimmedLine.startsWith('#')) {
-      const level = trimmedLine.match(/^#+/)?.[0].length || 0;
-      const content = trimmedLine.replace(/^#+\s*/, '').trim();
-      
-      const newSection: Section = {
+// 定义小节
+interface Section {
+  id: string;
+  title: string;
+  content: string;
+  isComplete: boolean;
+}
+
+// 定义拖拽
+interface DraggableItem {
+  id: string;
+  content: string;
+  description: string;
+  type: 'chapter' | 'section';
+  level: number;
+}
+
+// DropResult 接口定义
+interface DropResult {
+  draggableId: string;    // 被拖拽项目的 ID
+  type: string;           // 拖拽类型
+  source: {               // 拖拽源位置
+    index: number;        // 项目在源列表中的索引
+    droppableId: string;  // 源可放置区域的 ID
+  };
+  destination?: {         // 拖拽目标位置（可能为 null，如拖出可放置区域）
+    index: number;        // 项目在目标列表中的索引
+    droppableId: string;  // 目标可放置区域的 ID
+  };
+  reason: 'DROP' | 'CANCEL';  // 拖拽结束的原因
+}
+
+// 用于处理流式输入的字符并构建大纲结构
+const useStreamProcessor = () => {
+
+  const buffer = useRef<string>('');
+  // 存储所有已完成的章节的状态
+  const [completedChapters, setCompletedChapters] = useState<Chapter[]>([]);
+  const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
+  const [processedSection, setProcessedSection] = useState<Section | null>(null);
+  const [currentSection, setCurrentSection] = useState<Screen | null>(null);
+
+  // 处理完整的行的函数
+  const processLine = (line: string) => {
+    if (line.startsWith('# ')) {
+      const title = line.slice(2);
+    }
+
+    else if (line.startsWith('## ')) {
+      const newChapter = {
         id: crypto.randomUUID(),
-        level,
-        content,
-        description: '',
-        children: [],
+        title: line.slice(3).trim(),
+        sections: [],
+        isComplete: false
       };
 
-      setSections(prevSections => {
-        const newSections = [...prevSections];
-        
-        switch (level) {
-          case 1: // #
-            currentL1Ref.current = newSection;
-            currentL2Ref.current = null;
-            return [...newSections, newSection];
-            
-          case 2: // ##
-            if (currentL1Ref.current) {
-              currentL2Ref.current = newSection;
-              const l1Index = newSections.findIndex(s => s.id === currentL1Ref.current?.id);
-              if (l1Index !== -1) {
-                newSections[l1Index].children.push(newSection);
-              }
-            }
-            return newSections;
-            
-          case 3: // ###
-            if (currentL2Ref.current) {
-              const l1Index = newSections.findIndex(s => s.id === currentL1Ref.current?.id);
-              if (l1Index !== -1) {
-                const l2Index = newSections[l1Index].children.findIndex(
-                  s => s.id === currentL2Ref.current?.id
-                );
-                if (l2Index !== -1) {
-                  newSections[l1Index].children[l2Index].children.push(newSection);
-                }
-              }
-            } else if (currentL1Ref.current) {
-              const l1Index = newSections.findIndex(s => s.id === currentL1Ref.current?.id);
-              if (l1Index !== -1) {
-                newSections[l1Index].children.push(newSection);
-              }
-            }
-            return newSections;
-            
-          default:
-            return newSections;
-        }
-      });
-    } else if (trimmedLine) {
-      // 处理描述文本
-      setSections(prevSections => {
-        const newSections = [...prevSections];
-        let targetSection: Section | null = null;
-        
-        // 找到最后一个活动的章节
-        if (currentL2Ref.current) {
-          const l1Index = newSections.findIndex(s => s.id === currentL1Ref.current?.id);
-          if (l1Index !== -1) {
-            const l2Index = newSections[l1Index].children.findIndex(
-              s => s.id === currentL2Ref.current?.id
-            );
-            if (l2Index !== -1) {
-              const lastChild = newSections[l1Index].children[l2Index].children;
-              targetSection = lastChild[lastChild.length - 1] || newSections[l1Index].children[l2Index];
-            }
-          }
-        } else if (currentL1Ref.current) {
-          const l1Index = newSections.findIndex(s => s.id === currentL1Ref.current?.id);
-          if (l1Index !== -1) {
-            const lastChild = newSections[l1Index].children;
-            targetSection = lastChild[lastChild.length - 1] || newSections[l1Index];
-          }
-        }
-        
-        if (targetSection) {
-          targetSection.description += (targetSection.description ? '\n' : '') + trimmedLine;
-        }
-        
-        return newSections;
-      });
-    }
-  }, []);
-
-  // 处理流式输入
-  const processStreamInput = useCallback((char: string) => {
-    bufferRef.current += char;
-    
-    if (char === '\n') {
-      // 处理完整的行
-      if (currentLineRef.current) {
-        processLine(currentLineRef.current);
+      if (currentChapter) {
+        setCompletedChapters(prev => [...prev, { ...currentChapter, isComplete: true }]);
       }
-      currentLineRef.current = '';
-    } else {
-      currentLineRef.current += char;
+
+      // - 创建新的章节对象
+      setCurrentChapter(newChapter);
     }
-  }, [processLine]);
+
+    // 处理小节标题 (以 ### 开头)
+    else if (line.startsWith('### ')) {
+      // - 创建新的小节对象
+      const newSection: Section = {
+        id: crypto.randomUUID(),
+        title: line.slice(4).trim(),
+        content: '',
+        isComplete: false
+      }
+
+      // 更新当前章节的sections
+      if (currentChapter) {
+        setCurrentChapter(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            sections: [...prev.sections, newSection]
+          }
+        })
+      }
+    }
+
+    // 处理普通内容行（不以 #、## 或 ### 开头的行）
+    else if (line.trim()) {
+      if (currentChapter && currentChapter.sections.length > 0) {
+        setCurrentChapter(prev => {
+          if (!prev) return prev;
+          const sections = [...prev.sections];
+          const lastSection = sections[sections.length - 1];
+          if (lastSection) {
+            lastSection.content += line + '\n';
+          }
+          return { ...prev, sections };
+        })
+      }
+    }
+
+
+  }
+
+  const processChar = (char: string) => {
+    buffer.current += char;
+
+    if (char === '\n') {
+      const line = buffer.current.trim();
+      if (line) {
+        processLine(line);
+      }
+      buffer.current = '';
+    }
+  }
 
   return {
-    sections,
-    processStreamInput
-  };
+    completedChapters,
+    currentChapter,
+    processChar
+  }
+}
+
+const ChapterComponent: React.FC<{ chapter: Chapter }> = ({ chapter }) => {
+  return (
+    <div className="chapter">
+      <h2>{chapter.title}</h2>
+      {chapter.sections.map(section => (
+        <div key={section.id} className="section">
+          <h3>{section.title}</h3>
+          <div className="content">{section.content}</div>
+        </div>
+      ))}
+    </div>
+  );
 };
+
+const OutlineComponent = () => {
+  const inputVal = useOutlineStore((state) => state.inputVal);
+  const { completedChapters, currentChapter, processChar } = useStreamProcessor();
+  const [items, setItems] = useState<DraggableItem[]>([]);
+
+
+  // 处理拖拽结束事件
+  const handleOnDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const reorderedItems = Array.from(items);
+    const [reorderedItem] = reorderedItems.splice(result.source.index, 1);
+    reorderedItems.splice(result.destination.index, 0, reorderedItem)
+
+    setItems(reorderedItems);
+  }
+
+  useEffect(() => {
+    // 定于转换函数
+    const convertToItems = () => {
+      const newItems: DraggableItem[] = [];
+
+      if (completedChapters) {
+        completedChapters.forEach(chapter => {
+          newItems.push({
+            id: chapter.id,
+            content: chapter.title,
+            description: '',
+            type: 'chapter',
+            level: 1
+          })
+
+          chapter.sections.forEach(section => {
+            newItems.push({
+              id: section.id,
+              content: section.title,
+              description: section.content,
+              type: 'section',
+              level: 2
+            })
+          })
+        })
+      }
+
+      // 处理当前章节
+      if (currentChapter) {  // currentChapter 是单个对象，不是数组
+        newItems.push({
+          id: currentChapter.id,
+          content: currentChapter.title,
+          description: '',
+          type: 'chapter',
+          level: 1
+        });
+
+        currentChapter.sections.forEach(section => {
+          newItems.push({
+            id: section.id,
+            content: section.title,
+            description: section.content,
+            type: 'section',
+            level: 2
+          });
+        });
+      }
+
+      setItems(newItems);
+    }
+    convertToItems();
+  }, [completedChapters, currentChapter])
+
+  useEffect(() => {
+    if (inputVal) {
+      processChar(inputVal);
+    }
+  }, [inputVal, processChar]
+  )
+
+  return (
+    <div className='outline-containter'>
+      {completedChapters.map(chapter => (
+        <ChapterComponent key={chapter.id} chapter={chapter} />
+      ))}
+      {currentChapter && <ChapterComponent chapter={currentChapter} />}
+    </div>
+
+  )
+}
 
 const DragAndDropDemo = () => {
   const inputVal = useOutlineStore((state) => state.inputVal);  // 从 store 获取值
   const { sections, processStreamInput } = useStreamOutlineProcessor();
   const [items, setItems] = useState<{ id: string; content: string; description: string }[]>([]);
   const [showBtn, setShowBtn] = useState<boolean>(false);
+  const { completedChapters, currentChapter, processChar } = useStreamProcessor();
+  const [items, setItems] = useState<DraggableItem[]>([]);
+
+
+  // 处理拖拽结束事件
+  const handleOnDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const reorderedItems = Array.from(items);
+    const [reorderedItem] = reorderedItems.splice(result.source.index, 1);
+    reorderedItems.splice(result.destination.index, 0, reorderedItem)
+
+    setItems(reorderedItems);
+  }
 
   // 使用 useMemo 缓存当前完整的章节
   const currentSections = useMemo(() => {
@@ -241,6 +367,66 @@ const DragAndDropDemo = () => {
   };
 
   useEffect(() => {
+    // 定于转换函数
+    const convertToItems = () => {
+      const newItems: DraggableItem[] = [];
+
+      if (completedChapters) {
+        completedChapters.forEach(chapter => {
+          newItems.push({
+            id: chapter.id,
+            content: chapter.title,
+            description: '',
+            type: 'chapter',
+            level: 1
+          })
+
+          chapter.sections.forEach(section => {
+            newItems.push({
+              id: section.id,
+              content: section.title,
+              description: section.content,
+              type: 'section',
+              level: 2
+            })
+          })
+        })
+      }
+
+      // 处理当前章节
+      if (currentChapter) {  // currentChapter 是单个对象，不是数组
+        newItems.push({
+          id: currentChapter.id,
+          content: currentChapter.title,
+          description: '',
+          type: 'chapter',
+          level: 1
+        });
+
+        currentChapter.sections.forEach(section => {
+          newItems.push({
+            id: section.id,
+            content: section.title,
+            description: section.content,
+            type: 'section',
+            level: 2
+          });
+        });
+      }
+
+      setItems(newItems);
+    }
+    convertToItems();
+  }, [completedChapters, currentChapter])
+
+  useEffect(() => {
+    if (inputVal) {
+      processChar(inputVal);
+    }
+  }, [inputVal, processChar]
+  )
+
+  useEffect(() => {
     if (inputVal) {
       debouncedUpdate();
     }
@@ -252,7 +438,10 @@ const DragAndDropDemo = () => {
 
   return (
     <>
-      <DragDropContext onDragEnd={handleOnDragEnd}>
+    <div className="outline-container">
+    <DragDropContext onDragEnd={handleOnDragEnd
+      
+    }>
         <Droppable droppableId="droppable">
           {(provided) => (
             <div className={styles.outline_ul} ref={provided.innerRef} {...provided.droppableProps}>
@@ -288,6 +477,7 @@ const DragAndDropDemo = () => {
           )}
         </Droppable>
       </DragDropContext>
+    </div>
       {showBtn && (<Button className={styles.generate_article} type='primary' onClick={genPaper}>生成论文</Button>)}
     </>
   );
