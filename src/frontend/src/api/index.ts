@@ -33,13 +33,13 @@ export async function fetchOutline(message: string) {
                 if(event.event === 'FatalError') {
                     throw new Error(event.data);
                 }
-                const text = event.data;
+                const data = JSON.parse(event.data);
                 try {
-                    if (text === '[DONE]') {
+                    if (data.isLastMessage === true) {
                         return;
                     }
 
-                    updateInputVal((prevInputVal) => prevInputVal + text);
+                    updateInputVal((prevInputVal) => prevInputVal + data.content);
                 } catch (error) {
                     console.error('Error parsing message:', error);
                 }

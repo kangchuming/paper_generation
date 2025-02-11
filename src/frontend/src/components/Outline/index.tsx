@@ -91,13 +91,10 @@ interface DropResult {
 
 // 用于处理流式输入的字符并构建大纲结构
 const useStreamProcessor = () => {
-
   const buffer = useRef<string>('');
   // 存储所有已完成的章节的状态
   const [completedChapters, setCompletedChapters] = useState<Chapter[]>([]);
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
-  const [processedSection, setProcessedSection] = useState<Section | null>(null);
-  const [currentSection, setCurrentSection] = useState<Screen | null>(null);
 
   // 处理完整的行的函数
   const processLine = (line: string) => {
@@ -116,7 +113,6 @@ const useStreamProcessor = () => {
       if (currentChapter) {
         setCompletedChapters(prev => [...prev, { ...currentChapter, isComplete: true }]);
       }
-
       // - 创建新的章节对象
       setCurrentChapter(newChapter);
     }
@@ -160,17 +156,85 @@ const useStreamProcessor = () => {
 
 
   }
+  // 处理文章标题
+  const processTitle = () => {
+    const start = buffer.current.indexOf('《');
+    const end = buffer.current.indexOf('》');
 
-  const processChar = (char: string) => {
-    buffer.current += char;
-
-    if (char === '\n') {
-      const line = buffer.current.trim();
-      if (line) {
-        processLine(line);
-      }
-      buffer.current = '';
+    if (start != -1 && end != -1 && end > start) {
+      const title = buffer.current.slice(start + 1, end);
+      buffer.current = buffer.current.slice(end + 1);
+      processLine(`# ${title}`);
+      return true;
     }
+    return false;
+  }
+
+  // 抽象层级处理函数
+  const processHeading = (marker: string, prefix: string) => {
+    const pos = buffer.current.indexOf(marker);
+    if (pos === -1) return false;
+
+    const endPos = buffer.current.indexOf('\n', pos + marker.length);
+
+    // 不完整标记处理
+    if (endPos === -1) {
+      buffer.current = buffer.current.slice(0, pos) +
+        buffer.current.slice(pos).replace(marker, '');
+      return false;
+    }
+
+    // 处理完整标题
+    const title = buffer.current.slice(pos + marker.length, endPos).trim();
+    processLine(`${prefix} ${title}`);
+
+    // 更新缓冲区
+    buffer.current = buffer.current.slice(0, pos) +
+      buffer.current.slice(endPos);
+    return true;
+  }
+
+  // 处理普通文本内容
+  const processNormalContent = () => {
+    const lastNewLine = buffer.current.lastIndexOf('\n');
+
+    if (lastNewLine === -1) return false;  // Return false if no newline found
+
+    const complete = buffer.current.slice(0, lastNewLine);
+    const remaining = buffer.current.slice(lastNewLine + 1);
+
+    complete.split('\n').forEach(item => {
+      const content = item.trim();
+      if (content) processLine(content);
+    });
+
+    buffer.current = remaining;
+    return true;  // Return true to indicate processing occurred
+  }
+
+  const processChar = (text: string) => {
+    buffer.current += text;
+
+    // 处理优先级：最高级标记优先
+    const processors = [
+      () => processTitle(),      // 一级标题
+      () => processHeading('\n##', '##'),  // 二级标题
+      () => processHeading('\n###', '###'), // 三级标题
+      () => processNormalContent() // 普通内容
+    ];
+
+    // 循环处理直到没有可处理内容
+    let processed;
+    do {
+      processed = false;
+      for (const processor of processors) {
+        const result = processor();
+        if (result) {
+          processed = true;
+          break;
+        }
+      }
+    } while (processed);
   }
 
   return {
@@ -180,164 +244,11 @@ const useStreamProcessor = () => {
   }
 }
 
-const ChapterComponent: React.FC<{ chapter: Chapter }> = ({ chapter }) => {
-  return (
-    <div className="chapter">
-      <h2>{chapter.title}</h2>
-      {chapter.sections.map(section => (
-        <div key={section.id} className="section">
-          <h3>{section.title}</h3>
-          <div className="content">{section.content}</div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const OutlineComponent = () => {
-  const inputVal = useOutlineStore((state) => state.inputVal);
-  const { completedChapters, currentChapter, processChar } = useStreamProcessor();
-  const [items, setItems] = useState<DraggableItem[]>([]);
-
-
-  // 处理拖拽结束事件
-  const handleOnDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const reorderedItems = Array.from(items);
-    const [reorderedItem] = reorderedItems.splice(result.source.index, 1);
-    reorderedItems.splice(result.destination.index, 0, reorderedItem)
-
-    setItems(reorderedItems);
-  }
-
-  useEffect(() => {
-    // 定于转换函数
-    const convertToItems = () => {
-      const newItems: DraggableItem[] = [];
-
-      if (completedChapters) {
-        completedChapters.forEach(chapter => {
-          newItems.push({
-            id: chapter.id,
-            content: chapter.title,
-            description: '',
-            type: 'chapter',
-            level: 1
-          })
-
-          chapter.sections.forEach(section => {
-            newItems.push({
-              id: section.id,
-              content: section.title,
-              description: section.content,
-              type: 'section',
-              level: 2
-            })
-          })
-        })
-      }
-
-      // 处理当前章节
-      if (currentChapter) {  // currentChapter 是单个对象，不是数组
-        newItems.push({
-          id: currentChapter.id,
-          content: currentChapter.title,
-          description: '',
-          type: 'chapter',
-          level: 1
-        });
-
-        currentChapter.sections.forEach(section => {
-          newItems.push({
-            id: section.id,
-            content: section.title,
-            description: section.content,
-            type: 'section',
-            level: 2
-          });
-        });
-      }
-
-      setItems(newItems);
-    }
-    convertToItems();
-  }, [completedChapters, currentChapter])
-
-  useEffect(() => {
-    if (inputVal) {
-      processChar(inputVal);
-    }
-  }, [inputVal, processChar]
-  )
-
-  return (
-    <div className='outline-containter'>
-      {completedChapters.map(chapter => (
-        <ChapterComponent key={chapter.id} chapter={chapter} />
-      ))}
-      {currentChapter && <ChapterComponent chapter={currentChapter} />}
-    </div>
-
-  )
-}
-
 const DragAndDropDemo = () => {
   const inputVal = useOutlineStore((state) => state.inputVal);  // 从 store 获取值
-  const { sections, processStreamInput } = useStreamOutlineProcessor();
-  const [items, setItems] = useState<{ id: string; content: string; description: string }[]>([]);
   const [showBtn, setShowBtn] = useState<boolean>(false);
   const { completedChapters, currentChapter, processChar } = useStreamProcessor();
   const [items, setItems] = useState<DraggableItem[]>([]);
-
-
-  // 处理拖拽结束事件
-  const handleOnDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const reorderedItems = Array.from(items);
-    const [reorderedItem] = reorderedItems.splice(result.source.index, 1);
-    reorderedItems.splice(result.destination.index, 0, reorderedItem)
-
-    setItems(reorderedItems);
-  }
-
-  // 使用 useMemo 缓存当前完整的章节
-  const currentSections = useMemo(() => {
-    console.log(111, inputVal);
-    // 等待接收到完整的标题行（以 ### 开头）再处理
-    const sections = inputVal.split(/(?<=\n)(?=### )/).filter(section => section.trim() !== '');
-    return sections.length >= 3 ? sections.slice(2) : [];
-  }, [inputVal]);
-
-  // 使用 useCallback 包装更新函数
-  const updateItemsDescription = useCallback(() => {
-    // 只有当有新的完整章节时才更新
-    if (currentSections.length > 0) {
-      const newItems = currentSections.map((section, index) => {
-        // 检查章节是否包含完整的标题和描述
-        const lines = section.split('\n').filter(line => line.trim() !== '');
-
-        // 确保至少有标题行
-        if (lines.length === 0) return null;
-
-        const content = lines[0].trim();
-        const description = lines.slice(1).join('\n').trim();
-
-        return {
-          id: (index + 1).toString(),
-          content,
-          description
-        };
-      }).filter((item): item is { id: string; content: string; description: string } => item !== null);
-
-      // 只有当有有效的项目时才更新状态
-      if (newItems.length > 0) {
-        setItems(newItems);
-        setShowBtn(true);
-      }
-    }
-  }, [currentSections]);
 
   // 获取论文
   const genPaper = async () => {
@@ -349,11 +260,6 @@ const DragAndDropDemo = () => {
     }
   }
 
-  // 使用防抖处理频繁更新
-  const debouncedUpdate = useMemo(
-    () => debounce(updateItemsDescription, 300),
-    [updateItemsDescription]
-  );
 
   // 定义 handleOnDragEnd 函数
   const handleOnDragEnd = (result) => {
@@ -426,58 +332,48 @@ const DragAndDropDemo = () => {
   }, [inputVal, processChar]
   )
 
-  useEffect(() => {
-    if (inputVal) {
-      debouncedUpdate();
-    }
-
-    return () => {
-      debouncedUpdate.cancel();
-    };
-  }, [inputVal, debouncedUpdate]);
-
   return (
     <>
-    <div className="outline-container">
-    <DragDropContext onDragEnd={handleOnDragEnd
-      
-    }>
-        <Droppable droppableId="droppable">
-          {(provided) => (
-            <div className={styles.outline_ul} ref={provided.innerRef} {...provided.droppableProps}>
-              {items.map((item, index) => (
-                <Draggable key={item.id} draggableId={item.id} index={index}>
-                  {(provided) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      className={styles.draggable_item}
-                    >
-                      <div className={styles.section_content_item_context}>
-                        <TextArea rows={4} placeholder="请输入大纲标题" className={styles.section_content_item_context_title} value={item.content} onChange={(e) => {
-                          const newItems = [...items];
-                          newItems[index].content = e.target.value;
-                          setItems(newItems);
-                        }
+      <div className="outline-container">
+        <DragDropContext onDragEnd={handleOnDragEnd
 
-                        } />
-                        <TextArea rows={4} placeholder="请输入大纲具体描述" className={styles.section_content_item_context_content} autoSize={true} value={item.description} onChange={(e) => {
-                          const newItems = [...items];
-                          newItems[index].description = e.target.value;
-                          setItems(newItems)
-                        }} />
+        }>
+          <Droppable droppableId="droppable">
+            {(provided) => (
+              <div className={styles.outline_ul} ref={provided.innerRef} {...provided.droppableProps}>
+                {items.map((item, index) => (
+                  <Draggable key={item.id} draggableId={item.id} index={index}>
+                    {(provided) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className={styles.draggable_item}
+                      >
+                        <div className={styles.section_content_item_context}>
+                          <TextArea rows={4} placeholder="请输入大纲标题" className={styles.section_content_item_context_title} value={item.content} onChange={(e) => {
+                            const newItems = [...items];
+                            newItems[index].content = e.target.value;
+                            setItems(newItems);
+                          }
+
+                          } />
+                          <TextArea rows={4} placeholder="请输入大纲具体描述" className={styles.section_content_item_context_content} autoSize={true} value={item.description} onChange={(e) => {
+                            const newItems = [...items];
+                            newItems[index].description = e.target.value;
+                            setItems(newItems)
+                          }} />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
-    </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
+      </div>
       {showBtn && (<Button className={styles.generate_article} type='primary' onClick={genPaper}>生成论文</Button>)}
     </>
   );
