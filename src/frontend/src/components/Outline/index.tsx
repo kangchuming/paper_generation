@@ -5,7 +5,7 @@ import { Input, Button } from 'antd';
 import { fetchPaper } from '@api/index.ts';
 import { useOutlineStore } from '@store/outline';
 import styles from './index.module.scss'; // 引入样式
-import { section, title, use } from 'framer-motion/client';
+import { pre, section, title, use } from 'framer-motion/client';
 
 const { TextArea } = Input;
 
@@ -42,19 +42,20 @@ const prompt_paper = `您是一位在学术写作领域极具权威性的专家�
 始终严格遵守学术道德和相关法律规范，坚决杜绝任何抄袭或剽窃他人成果的行为。确保论文的原创性，所有观点和内容均为独立创作或基于合法引用。引用他人成果时，需按照规范进行标注，尊重知识产权。
 请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。`;
 
-// 定义文章
-interface Article {
-  id: string;
-  title: string;
-  chapters: Chapter[];
-}
 
-// 定义章节
+// 定义章节接口
 interface Chapter {
   id: string;
   title: string;
   sections: Section[];
   isComplete: boolean;
+}
+
+// 定义文章
+interface Article {
+  id: string;
+  title: string;
+  chapters: Chapter[];
 }
 
 // 定义小节
@@ -93,32 +94,45 @@ interface DropResult {
 const useStreamProcessor = () => {
   const buffer = useRef<string>('');
   // 存储所有已完成的章节的状态
-  const [completedChapters, setCompletedChapters] = useState<Chapter[]>([]);
-  const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
+  const [article, setArticle] = useState<Article>({
+    id: crypto.randomUUID(),
+    title: '',
+    chapters: []
+  });
 
   // 处理完整的行的函数
   const processLine = (line: string) => {
     if (line.startsWith('# ')) {
       const title = line.slice(2);
+
+      setArticle(prev => ({
+        ...prev,
+        title
+      }))
     }
 
     else if (line.startsWith('## ')) {
+      const title = line.slice(3).trim();
+      const exists = article.chapters.some(chapter => chapter.title === title);
+      if(exists) return;
+
       const newChapter = {
         id: crypto.randomUUID(),
-        title: line.slice(3).trim(),
+        title: title,
         sections: [],
         isComplete: false
       };
 
-      if (currentChapter) {
-        setCompletedChapters(prev => [...prev, { ...currentChapter, isComplete: true }]);
-      }
-      // - 创建新的章节对象
-      setCurrentChapter(newChapter);
+      // 存储文章标题
+    setArticle(prev => ({
+      ...prev,
+      chapters: [...prev.chapters, newChapter]
+    }));
     }
 
     // 处理小节标题 (以 ### 开头)
     else if (line.startsWith('### ')) {
+      if(article.chapters.length <= 0) return;
       // - 创建新的小节对象
       const newSection: Section = {
         id: crypto.randomUUID(),
@@ -127,34 +141,29 @@ const useStreamProcessor = () => {
         isComplete: false
       }
 
-      // 更新当前章节的sections
-      if (currentChapter) {
-        setCurrentChapter(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            sections: [...prev.sections, newSection]
-          }
-        })
-      }
+      setArticle(prev => {
+        const chapters = [...prev.chapters];
+        const currentChapter = chapters[chapters.length - 1];
+        currentChapter.sections.push(newSection);
+        return {...prev, chapters};
+
+      })
     }
 
     // 处理普通内容行（不以 #、## 或 ### 开头的行）
     else if (line.trim()) {
-      if (currentChapter && currentChapter.sections.length > 0) {
-        setCurrentChapter(prev => {
-          if (!prev) return prev;
-          const sections = [...prev.sections];
-          const lastSection = sections[sections.length - 1];
-          if (lastSection) {
-            lastSection.content += line + '\n';
-          }
-          return { ...prev, sections };
-        })
-      }
+      if(article.chapters.length <= 0) return;
+      setArticle(prev => {
+        const chapters = [...prev.chapters];
+        const currentChapter = chapters[chapters.length - 1];
+
+        if(currentChapter.sections.length > 0) {
+          const lastSection = currentChapter.sections[currentChapter.sections.length - 1];
+          lastSection.content = (lastSection.content + '' + line.trim()).trim()
+        }
+        return {...prev, chapters};
+      })
     }
-
-
   }
   // 处理文章标题
   const processTitle = () => {
@@ -174,31 +183,27 @@ const useStreamProcessor = () => {
   const processHeading = (marker: string, prefix: string) => {
     const pos = buffer.current.indexOf(marker);
     if (pos === -1) return false;
+    const nextPos = buffer.current.indexOf('\n', pos + 1);
 
-    const endPos = buffer.current.indexOf('\n', pos + marker.length);
-
-    // 不完整标记处理
-    if (endPos === -1) {
-      buffer.current = buffer.current.slice(0, pos) +
-        buffer.current.slice(pos).replace(marker, '');
-      return false;
-    }
-
-    // 处理完整标题
+    const endPos = nextPos !== -1 ? nextPos : buffer.current.indexOf('\n', pos + marker.length);
+    
+    if(endPos === -1) return false;
+    
+    // 需要确保处理完后正确清理缓冲区
     const title = buffer.current.slice(pos + marker.length, endPos).trim();
-    processLine(`${prefix} ${title}`);
+    // 检查空标题
+    if(!title) return false;
 
-    // 更新缓冲区
-    buffer.current = buffer.current.slice(0, pos) +
-      buffer.current.slice(endPos);
+    processLine(`${prefix} ${title}`);
+    
+    buffer.current = buffer.current.slice(0, pos) + buffer.current.slice(endPos);
     return true;
   }
 
   // 处理普通文本内容
   const processNormalContent = () => {
     const lastNewLine = buffer.current.lastIndexOf('\n');
-
-    if (lastNewLine === -1) return false;  // Return false if no newline found
+    if (lastNewLine === -1) return false;
 
     const complete = buffer.current.slice(0, lastNewLine);
     const remaining = buffer.current.slice(lastNewLine + 1);
@@ -209,7 +214,7 @@ const useStreamProcessor = () => {
     });
 
     buffer.current = remaining;
-    return true;  // Return true to indicate processing occurred
+    return true;
   }
 
   const processChar = (text: string) => {
@@ -234,12 +239,11 @@ const useStreamProcessor = () => {
           break;
         }
       }
-    } while (processed);
+    } while (processed && buffer.current.length > 0);
   }
 
   return {
-    completedChapters,
-    currentChapter,
+    article,
     processChar
   }
 }
@@ -247,7 +251,7 @@ const useStreamProcessor = () => {
 const DragAndDropDemo = () => {
   const inputVal = useOutlineStore((state) => state.inputVal);  // 从 store 获取值
   const [showBtn, setShowBtn] = useState<boolean>(false);
-  const { completedChapters, currentChapter, processChar } = useStreamProcessor();
+  const { article, processChar } = useStreamProcessor();
   const [items, setItems] = useState<DraggableItem[]>([]);
 
   // 获取论文
@@ -276,9 +280,7 @@ const DragAndDropDemo = () => {
     // 定于转换函数
     const convertToItems = () => {
       const newItems: DraggableItem[] = [];
-
-      if (completedChapters) {
-        completedChapters.forEach(chapter => {
+        article.chapters.forEach(chapter => {
           newItems.push({
             id: chapter.id,
             content: chapter.title,
@@ -297,39 +299,17 @@ const DragAndDropDemo = () => {
             })
           })
         })
-      }
-
-      // 处理当前章节
-      if (currentChapter) {  // currentChapter 是单个对象，不是数组
-        newItems.push({
-          id: currentChapter.id,
-          content: currentChapter.title,
-          description: '',
-          type: 'chapter',
-          level: 1
-        });
-
-        currentChapter.sections.forEach(section => {
-          newItems.push({
-            id: section.id,
-            content: section.title,
-            description: section.content,
-            type: 'section',
-            level: 2
-          });
-        });
-      }
 
       setItems(newItems);
     }
     convertToItems();
-  }, [completedChapters, currentChapter])
+  }, [article])
 
   useEffect(() => {
     if (inputVal) {
       processChar(inputVal);
     }
-  }, [inputVal, processChar]
+  }, [inputVal]
   )
 
   return (
