@@ -113,8 +113,9 @@ const useStreamProcessor = () => {
 
     else if (line.startsWith('## ')) {
       const title = line.slice(3).trim();
+      // 检查是否已存在相同标题的章节
       const exists = article.chapters.some(chapter => chapter.title === title);
-      if(exists) return;
+      if(exists) return;  // 如果已存在则直接返回，不再添加
 
       const newChapter = {
         id: crypto.randomUUID(),
@@ -123,21 +124,29 @@ const useStreamProcessor = () => {
         isComplete: false
       };
 
-      // 存储文章标题
-    setArticle(prev => ({
-      ...prev,
-      chapters: [...prev.chapters, newChapter]
-    }));
+      setArticle(prev => ({
+        ...prev,
+        chapters: [...prev.chapters, newChapter]
+      }));
     }
 
     // 处理小节标题 (以 ### 开头)
     else if (line.startsWith('### ')) {
       if(article.chapters.length <= 0) return;
-      // - 创建新的小节对象
+      const parts = line.split('\n').filter(Boolean);
+      const title = parts[0].slice(4).trim();
+      
+      if(!title) return;  // 确保标题存在
+      
+      const currentChapter = article.chapters[article.chapters.length - 1];
+      const exists = currentChapter.sections.some(section => section.title === title);
+      if(exists) return;
+      
+      const content = parts.slice(1).join('\n').trim();
       const newSection: Section = {
         id: crypto.randomUUID(),
-        title: line.slice(4).trim(),
-        content: '',
+        title,
+        content,
         isComplete: false
       }
 
@@ -145,22 +154,6 @@ const useStreamProcessor = () => {
         const chapters = [...prev.chapters];
         const currentChapter = chapters[chapters.length - 1];
         currentChapter.sections.push(newSection);
-        return {...prev, chapters};
-
-      })
-    }
-
-    // 处理普通内容行（不以 #、## 或 ### 开头的行）
-    else if (line.trim()) {
-      if(article.chapters.length <= 0) return;
-      setArticle(prev => {
-        const chapters = [...prev.chapters];
-        const currentChapter = chapters[chapters.length - 1];
-
-        if(currentChapter.sections.length > 0) {
-          const lastSection = currentChapter.sections[currentChapter.sections.length - 1];
-          lastSection.content = (lastSection.content + '' + line.trim()).trim()
-        }
         return {...prev, chapters};
       })
     }
@@ -183,35 +176,48 @@ const useStreamProcessor = () => {
   const processHeading = (marker: string, prefix: string) => {
     const pos = buffer.current.indexOf(marker);
     if (pos === -1) return false;
-    const nextPos = buffer.current.indexOf('\n', pos + 1);
 
-    const endPos = nextPos !== -1 ? nextPos : buffer.current.indexOf('\n', pos + marker.length);
+    // 查找下一个标记的位置（## 或 ###）
+    let nextPos = buffer.current.length;
+    const nextH2 = buffer.current.indexOf('\n## ', pos + 1);
+    const nextH3 = buffer.current.indexOf('\n### ', pos + 1);
     
-    if(endPos === -1) return false;
-    
-    // 需要确保处理完后正确清理缓冲区
-    const title = buffer.current.slice(pos + marker.length, endPos).trim();
-    // 检查空标题
-    if(!title) return false;
+    if (nextH2 !== -1) nextPos = Math.min(nextPos, nextH2);
+    if (nextH3 !== -1) nextPos = Math.min(nextPos, nextH3);
 
-    processLine(`${prefix} ${title}`);
+    // 提取当前段落的完整内容
+    const fullContent = buffer.current.slice(pos, nextPos).trim();
     
-    buffer.current = buffer.current.slice(0, pos) + buffer.current.slice(endPos);
+    // 分离标题和内容
+    const lines = fullContent.split('\n');
+    const title = lines[0].replace(marker, '').trim();
+    
+    if (!title) return false;
+
+    // 处理内容
+    if (marker === '###') {
+      const content = lines.slice(1).join('\n').trim();
+      processLine(`### ${title}\n${content}`);
+    } else {
+      processLine(`${prefix} ${title}`);
+    }
+
+    // 更新缓冲区
+    buffer.current = buffer.current.slice(0, pos) + buffer.current.slice(nextPos);
     return true;
   }
 
   // 处理普通文本内容
   const processNormalContent = () => {
-    const lastNewLine = buffer.current.lastIndexOf('\n');
-    if (lastNewLine === -1) return false;
+    const doubleNewLine = buffer.current.indexOf('\n\n');
+    if (doubleNewLine === -1) return false;
 
-    const complete = buffer.current.slice(0, lastNewLine);
-    const remaining = buffer.current.slice(lastNewLine + 1);
+    const complete = buffer.current.slice(0, doubleNewLine);
+    const remaining = buffer.current.slice(doubleNewLine + 2);
 
-    complete.split('\n').forEach(item => {
-      const content = item.trim();
-      if (content) processLine(content);
-    });
+    if (complete.trim()) {
+      processLine(complete.trim());
+    }
 
     buffer.current = remaining;
     return true;
@@ -222,19 +228,17 @@ const useStreamProcessor = () => {
 
     // 处理优先级：最高级标记优先
     const processors = [
-      () => processTitle(),      // 一级标题
-      () => processHeading('\n##', '##'),  // 二级标题
-      () => processHeading('\n###', '###'), // 三级标题
-      () => processNormalContent() // 普通内容
+      () => processTitle(),      // 处理文章标题
+      () => processHeading('## ', '##'),   // 处理章节标题
+      () => processHeading('### ', '###'), // 处理小节标题
+      () => processNormalContent()  // 处理普通内容
     ];
 
-    // 循环处理直到没有可处理内容
     let processed;
     do {
       processed = false;
       for (const processor of processors) {
-        const result = processor();
-        if (result) {
+        if (processor()) {
           processed = true;
           break;
         }
