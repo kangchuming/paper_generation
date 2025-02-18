@@ -115,7 +115,7 @@ const useStreamProcessor = () => {
       const title = line.slice(3).trim();
       // 检查是否已存在相同标题的章节
       const exists = article.chapters.some(chapter => chapter.title === title);
-      if(exists) return;  // 如果已存在则直接返回，不再添加
+      if (exists) return;  // 如果已存在则直接返回，不再添加
 
       const newChapter = {
         id: crypto.randomUUID(),
@@ -132,16 +132,16 @@ const useStreamProcessor = () => {
 
     // 处理小节标题 (以 ### 开头)
     else if (line.startsWith('### ')) {
-      if(article.chapters.length <= 0) return;
+      if (article.chapters.length <= 0) return;
       const parts = line.split('\n').filter(Boolean);
       const title = parts[0].slice(4).trim();
-      
-      if(!title) return;  // 确保标题存在
-      
+
+      if (!title) return;  // 确保标题存在
+
       const currentChapter = article.chapters[article.chapters.length - 1];
       const exists = currentChapter.sections.some(section => section.title === title);
-      if(exists) return;
-      
+      if (exists) return;
+
       const content = parts.slice(1).join('\n').trim();
       const newSection: Section = {
         id: crypto.randomUUID(),
@@ -154,14 +154,14 @@ const useStreamProcessor = () => {
         const chapters = [...prev.chapters];
         const currentChapter = chapters[chapters.length - 1];
         currentChapter.sections.push(newSection);
-        return {...prev, chapters};
+        return { ...prev, chapters };
       })
     }
   }
   // 处理文章标题
-  const processTitle = () => {
-    const start = buffer.current.indexOf('《');
-    const end = buffer.current.indexOf('》');
+  const processTitle = (marker: string) => {
+    const start = buffer.current.indexOf(marker);
+    const end = buffer.current.indexOf('\n\n');
 
     if (start != -1 && end != -1 && end > start) {
       const title = buffer.current.slice(start + 1, end);
@@ -172,38 +172,40 @@ const useStreamProcessor = () => {
     return false;
   }
 
-  // 抽象层级处理函数
+  // 修改 processHeading 函数
   const processHeading = (marker: string, prefix: string) => {
-    const pos = buffer.current.indexOf(marker);
-    if (pos === -1) return false;
+    // 使用严格匹配模式：换行符 + 标记 + 空格
+    const fullPattern = `${marker}`;
+    const patternPos = buffer.current.indexOf(fullPattern);
+    if (patternPos === -1) return false;
 
-    // 查找下一个标记的位置（## 或 ###）
-    let nextPos = buffer.current.length;
-    const nextH2 = buffer.current.indexOf('\n## ', pos + 1);
-    const nextH3 = buffer.current.indexOf('\n### ', pos + 1);
-    
-    if (nextH2 !== -1) nextPos = Math.min(nextPos, nextH2);
-    if (nextH3 !== -1) nextPos = Math.min(nextPos, nextH3);
+    // 查找段落结束位置（必须包含换行符）
+    const lineEnd = buffer.current.indexOf('\n', patternPos + fullPattern.length);
+    if (lineEnd === -1) return false; // 没有完整行时暂不处理
 
-    // 提取当前段落的完整内容
-    const fullContent = buffer.current.slice(pos, nextPos).trim();
-    
-    // 分离标题和内容
-    const lines = fullContent.split('\n');
-    const title = lines[0].replace(marker, '').trim();
-    
-    if (!title) return false;
+    // 提取完整标题内容（从标记结尾到换行符）
+    const titleContent = buffer.current.slice(
+      patternPos + fullPattern.length,
+      lineEnd
+    ).trim();
 
-    // 处理内容
-    if (marker === '###') {
-      const content = lines.slice(1).join('\n').trim();
-      processLine(`### ${title}\n${content}`);
+    // 在 processHeading 函数顶部添加声明
+    let contentEnd = -1;  // 初始化默认值
+
+    // 修改原有的内容结束位置查找逻辑
+    if (marker === '### ') {
+      contentEnd = buffer.current.indexOf('\n## ', lineEnd);
+      if (contentEnd === -1) contentEnd = buffer.current.indexOf('\n\n', lineEnd);
+      if (contentEnd === -1) contentEnd = buffer.current.length;
+
+      const content = buffer.current.slice(lineEnd + 1, contentEnd).trim();
+      processLine(`### ${titleContent}\n${content}`);
     } else {
-      processLine(`${prefix} ${title}`);
+      processLine(`## ${titleContent}`);
     }
 
-    // 更新缓冲区
-    buffer.current = buffer.current.slice(0, pos) + buffer.current.slice(nextPos);
+    // 更新缓冲区时使用已声明的变量
+    buffer.current = buffer.current.slice(contentEnd !== -1 ? contentEnd : lineEnd);
     return true;
   }
 
@@ -223,27 +225,21 @@ const useStreamProcessor = () => {
     return true;
   }
 
+  // 增强的 processChar 方法
   const processChar = (text: string) => {
     buffer.current += text;
-
-    // 处理优先级：最高级标记优先
+    // 新的处理优先级（严格模式）
     const processors = [
-      () => processTitle(),      // 处理文章标题
-      () => processHeading('## ', '##'),   // 处理章节标题
-      () => processHeading('### ', '###'), // 处理小节标题
-      () => processNormalContent()  // 处理普通内容
+      () => /^#\s/.test(buffer.current) && processTitle('# '),
+      () => /^##\s/.test(buffer.current) && processHeading('## ', '##'),
+      () => /^###\s/.test(buffer.current) && processHeading('### ', '###'),
+      () => buffer.current.includes('\n\n') && processNormalContent()
     ];
 
-    let processed;
-    do {
-      processed = false;
-      for (const processor of processors) {
-        if (processor()) {
-          processed = true;
-          break;
-        }
-      }
-    } while (processed && buffer.current.length > 0);
+    // 单次处理循环（避免过度处理）
+    for (const processor of processors) {
+      if (processor()) break;
+    }
   }
 
   return {
@@ -284,25 +280,25 @@ const DragAndDropDemo = () => {
     // 定于转换函数
     const convertToItems = () => {
       const newItems: DraggableItem[] = [];
-        article.chapters.forEach(chapter => {
-          newItems.push({
-            id: chapter.id,
-            content: chapter.title,
-            description: '',
-            type: 'chapter',
-            level: 1
-          })
+      article.chapters.forEach(chapter => {
+        newItems.push({
+          id: chapter.id,
+          content: chapter.title,
+          description: '',
+          type: 'chapter',
+          level: 1
+        })
 
-          chapter.sections.forEach(section => {
-            newItems.push({
-              id: section.id,
-              content: section.title,
-              description: section.content,
-              type: 'section',
-              level: 2
-            })
+        chapter.sections.forEach(section => {
+          newItems.push({
+            id: section.id,
+            content: section.title,
+            description: section.content,
+            type: 'section',
+            level: 2
           })
         })
+      })
 
       setItems(newItems);
     }
