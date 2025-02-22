@@ -30,16 +30,16 @@ export async function fetchOutline(message: string) {
             },
 
             onmessage(event) {
-                if(event.event === 'FatalError') {
+                if (event.event === 'FatalError') {
                     throw new Error(event.data);
                 }
                 const data = JSON.parse(event.data);
-                try {
+                try {  
                     if (data.isLastMessage === true) {
                         return;
                     }
+                    updateInputVal(data.content);
 
-                    updateInputVal((prevInputVal) => prevInputVal + data.content);
                 } catch (error) {
                     console.error('Error parsing message:', error);
                 }
@@ -47,7 +47,7 @@ export async function fetchOutline(message: string) {
 
             onerror(error) {
                 console.error('Stream error:', error);
-                updateInputVal((prevInputVal) => 
+                updateInputVal((prevInputVal: string) =>
                     prevInputVal + '\n\n[错误：连接中断，请重试]'
                 );
                 throw error;

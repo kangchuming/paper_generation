@@ -5,7 +5,7 @@ import { Input, Button } from 'antd';
 import { fetchPaper } from '@api/index.ts';
 import { useOutlineStore } from '@store/outline';
 import styles from './index.module.scss'; // 引入样式
-import { pre, section, title, use } from 'framer-motion/client';
+import { b, pre, section, title, use } from 'framer-motion/client';
 
 const { TextArea } = Input;
 
@@ -42,6 +42,12 @@ const prompt_paper = `您是一位在学术写作领域极具权威性的专家�
 始终严格遵守学术道德和相关法律规范，坚决杜绝任何抄袭或剽窃他人成果的行为。确保论文的原创性，所有观点和内容均为独立创作或基于合法引用。引用他人成果时，需按照规范进行标注，尊重知识产权。
 请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。`;
 
+// 定义文章
+interface Article {
+  id: string;
+  title: string;
+  chapters: Chapter[];
+}
 
 // 定义章节接口
 interface Chapter {
@@ -49,13 +55,6 @@ interface Chapter {
   title: string;
   sections: Section[];
   isComplete: boolean;
-}
-
-// 定义文章
-interface Article {
-  id: string;
-  title: string;
-  chapters: Chapter[];
 }
 
 // 定义小节
@@ -93,6 +92,7 @@ interface DropResult {
 // 用于处理流式输入的字符并构建大纲结构
 const useStreamProcessor = () => {
   const buffer = useRef<string>('');
+  const curIndexRef = useRef<number>(0);
   // 存储所有已完成的章节的状态
   const [article, setArticle] = useState<Article>({
     id: crypto.randomUUID(),
@@ -113,9 +113,6 @@ const useStreamProcessor = () => {
 
     else if (line.startsWith('## ')) {
       const title = line.slice(3).trim();
-      // 检查是否已存在相同标题的章节
-      const exists = article.chapters.some(chapter => chapter.title === title);
-      if (exists) return;  // 如果已存在则直接返回，不再添加
 
       const newChapter = {
         id: crypto.randomUUID(),
@@ -138,10 +135,6 @@ const useStreamProcessor = () => {
 
       if (!title) return;  // 确保标题存在
 
-      const currentChapter = article.chapters[article.chapters.length - 1];
-      const exists = currentChapter.sections.some(section => section.title === title);
-      if (exists) return;
-
       const content = parts.slice(1).join('\n').trim();
       const newSection: Section = {
         id: crypto.randomUUID(),
@@ -160,86 +153,98 @@ const useStreamProcessor = () => {
   }
   // 处理文章标题
   const processTitle = (marker: string) => {
-    const start = buffer.current.indexOf(marker);
-    const end = buffer.current.indexOf('\n\n');
+    const start = buffer.current.indexOf('#', curIndexRef.current);
+    if (start === -1) return -1;
 
-    if (start != -1 && end != -1 && end > start) {
-      const title = buffer.current.slice(start + 1, end);
-      buffer.current = buffer.current.slice(end + 1);
-      processLine(`# ${title}`);
-      return true;
-    }
-    return false;
+    const end = buffer.current.indexOf('\n\n', start);
+    if (end === -1) {
+      curIndexRef.current = start;
+      return -1;
+    };
+
+    const title = buffer.current.slice(start + marker.length, end);
+    buffer.current = buffer.current.slice(end + 2);
+    processLine(`# ${title}`);
+    curIndexRef.current = end + 2;
+    return end + 2;
   }
 
   // 修改 processHeading 函数
-  const processHeading = (marker: string, prefix: string) => {
+  const processHeading = (marker: string) => {
     // 使用严格匹配模式：换行符 + 标记 + 空格
-    const fullPattern = `${marker}`;
-    const patternPos = buffer.current.indexOf(fullPattern);
-    if (patternPos === -1) return false;
+    const start = buffer.current.indexOf(marker, curIndexRef.current);
 
-    // 查找段落结束位置（必须包含换行符）
-    const lineEnd = buffer.current.indexOf('\n', patternPos + fullPattern.length);
-    if (lineEnd === -1) return false; // 没有完整行时暂不处理
+    if (start === -1) {
+      return -1;
+    }
+
+    const lineEnd = buffer.current.indexOf('\n', start);
+    if (lineEnd === -1) {
+      curIndexRef.current = start;
+      return -1;
+    };
 
     // 提取完整标题内容（从标记结尾到换行符）
-    const titleContent = buffer.current.slice(
-      patternPos + fullPattern.length,
-      lineEnd
-    ).trim();
+    const titleContent = buffer.current.slice(marker.length, start).trim();
 
-    // 在 processHeading 函数顶部添加声明
-    let contentEnd = -1;  // 初始化默认值
-
-    // 修改原有的内容结束位置查找逻辑
+    // 修改原有的内容结束位置查找逻辑  
     if (marker === '### ') {
-      contentEnd = buffer.current.indexOf('\n## ', lineEnd);
-      if (contentEnd === -1) contentEnd = buffer.current.indexOf('\n\n', lineEnd);
-      if (contentEnd === -1) contentEnd = buffer.current.length;
-
-      const content = buffer.current.slice(lineEnd + 1, contentEnd).trim();
+      const contentEnd = buffer.current.indexOf('\n\n', lineEnd);
+      if (contentEnd === -1) return -1;
+      curIndexRef.current = contentEnd;
+      const content = buffer.current.slice(lineEnd, contentEnd).trim();
       processLine(`### ${titleContent}\n${content}`);
-    } else {
+    } else if (marker === '##') {
       processLine(`## ${titleContent}`);
+      curIndexRef.current = lineEnd;
     }
 
-    // 更新缓冲区时使用已声明的变量
-    buffer.current = buffer.current.slice(contentEnd !== -1 ? contentEnd : lineEnd);
-    return true;
+    return curIndexRef.current;
   }
 
-  // 处理普通文本内容
-  const processNormalContent = () => {
-    const doubleNewLine = buffer.current.indexOf('\n\n');
-    if (doubleNewLine === -1) return false;
-
-    const complete = buffer.current.slice(0, doubleNewLine);
-    const remaining = buffer.current.slice(doubleNewLine + 2);
-
-    if (complete.trim()) {
-      processLine(complete.trim());
-    }
-
-    buffer.current = remaining;
-    return true;
-  }
 
   // 增强的 processChar 方法
   const processChar = (text: string) => {
-    buffer.current += text;
-    // 新的处理优先级（严格模式）
-    const processors = [
-      () => /^#\s/.test(buffer.current) && processTitle('# '),
-      () => /^##\s/.test(buffer.current) && processHeading('## ', '##'),
-      () => /^###\s/.test(buffer.current) && processHeading('### ', '###'),
-      () => buffer.current.includes('\n\n') && processNormalContent()
-    ];
+    buffer.current = text;
+    // debugger;
+    let processed: boolean;
 
-    // 单次处理循环（避免过度处理）
-    for (const processor of processors) {
-      if (processor()) break;
-    }
+    do {
+      processed = false;
+
+      // 每个处理函数返回是否成功处理
+      if (buffer.current.indexOf('#', curIndexRef.current) !== -1) {
+        const result = processTitle('# ');
+        if (result === -1) {
+          // 如果没找到完整段落，等待下次处理
+          break;
+        } else {
+          processed = true;
+        }
+      }
+      else if (buffer.current.indexOf('##', curIndexRef.current) !== -1) {
+        const result = processHeading('## ');
+        if (result === -1) {
+          // 如果没找到完整段落，等待下次处理
+          break;
+        } else {
+          processed = true;
+        }
+      }
+      else if (buffer.current.indexOf('###', curIndexRef.current) !== -1) {
+        const result = processHeading('### ');
+        if (result === -1) {
+          // 如果没找到完整段落，等待下次处理
+          break;
+        } else {
+          processed = true;
+        }
+      }
+      else {
+        continue;
+      }
+      // 当任一处理成功时继续循环（可能处理多个块）
+    } while (processed);
   }
 
   return {
@@ -304,6 +309,8 @@ const DragAndDropDemo = () => {
     }
     convertToItems();
   }, [article])
+
+
 
   useEffect(() => {
     if (inputVal) {

@@ -3,12 +3,12 @@ import { immer } from 'zustand/middleware/immer'
 
 
 type State = {
-  inputVal: string ;
+  inputVal: string;
   paper: string;
 }
 
 type Actions = {
-  updateInputVal: (message: string | ((preVal: string) => string)) => void
+  updateInputVal: (message: string) => void
   updatePaper: (newPaper: string | ((prev: string) => string)) => void
 }
 
@@ -16,11 +16,9 @@ export const useOutlineStore = create<State & Actions>()(
   immer((set) => ({
     inputVal: '',
     paper: '',
-    updateInputVal: (updater: string | ((prevVal: string) => string)) =>
+    updateInputVal: (message: string) =>
       set((state) => {
-        state.inputVal = typeof updater === 'function' 
-          ? updater(state.inputVal)
-          : updater;
+        state.inputVal += message
       }),
     updatePaper: (newPaper: string | ((prev: string) => string)) =>
       set((state) => {
