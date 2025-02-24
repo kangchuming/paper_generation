@@ -40,14 +40,17 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    
+
     try {
         // 移除不必要的 response 写入，直接调用 main
+        console.log('Stream started');
         await main(message, res);
     } catch (error) {
         console.error('处理请求出错：', error);
         res.write(`data: ${JSON.stringify({ error: '内部服务器错误' })}\n\n`);
         res.end();
+    } finally {
+        console.log('Stream ended');
     }
 
     req.on('close', () => {
