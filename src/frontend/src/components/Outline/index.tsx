@@ -154,19 +154,20 @@ const useStreamProcessor = () => {
   // 处理文章标题
   const processTitle = (marker: string) => {
     const start = buffer.current.indexOf('#', curIndexRef.current);
-    if (start === -1) return -1;
+    if (start === -1) return;
 
     const end = buffer.current.indexOf('\n\n', start);
+
     if (end === -1) {
       curIndexRef.current = start;
-      return -1;
+      return;
     };
 
     const title = buffer.current.slice(start + marker.length, end);
-    buffer.current = buffer.current.slice(end + 2);
     processLine(`# ${title}`);
+
     curIndexRef.current = end + 2;
-    return end + 2;
+    return curIndexRef.current;
   }
 
   // 修改 processHeading 函数
@@ -175,22 +176,22 @@ const useStreamProcessor = () => {
     const start = buffer.current.indexOf(marker, curIndexRef.current);
 
     if (start === -1) {
-      return -1;
+      return;
     }
 
     const lineEnd = buffer.current.indexOf('\n', start);
     if (lineEnd === -1) {
       curIndexRef.current = start;
-      return -1;
+      return;
     };
 
     // 提取完整标题内容（从标记结尾到换行符）
-    const titleContent = buffer.current.slice(marker.length, start).trim();
+    const titleContent = buffer.current.slice(marker.length, start - 1).trim();
 
     // 修改原有的内容结束位置查找逻辑  
     if (marker === '### ') {
       const contentEnd = buffer.current.indexOf('\n\n', lineEnd);
-      if (contentEnd === -1) return -1;
+      if (contentEnd === -1) return;
       curIndexRef.current = contentEnd;
       const content = buffer.current.slice(lineEnd, contentEnd).trim();
       processLine(`### ${titleContent}\n${content}`);
@@ -205,46 +206,23 @@ const useStreamProcessor = () => {
 
   // 增强的 processChar 方法
   const processChar = (text: string) => {
-    buffer.current = text;
-    // debugger;
-    let processed: boolean;
+    // buffer.current = text;
+    debugger
+    buffer.current = "\# SCI论文大纲：基于张继科技战术分析的运动健康促进研究\n\n## 引言\n### 领域重要性\n运动健康领域在现代社会备受关注，体育活动不仅能增强身体素质，还对心理健康产生积极影响。乒乓球作为一项全球性的体育运动，具有广泛的群众基础和竞技价值。它能有效锻炼人体的反应速度、协调能力和心肺功能等，对不同年龄段人群的健康都有着重要意义。\n### 关键矛盾\n尽管乒乓球运动的健康益处已被广泛认可，但对于优秀运动员技战术中蕴含的运动健康促进要素尚未得到充分挖掘。现有研究多集中在竞技层面的技术分析，忽略了其对大众运动健康的指导价值。\n### 知识缺口\n目前缺乏从运动健康视角系统分析优秀乒乓球运动员技战术的研究，无法为大众提供基于专业运动员经验的科学运动建议。\n### 本文定位\n本文旨在深入剖析张继科的技战术特点，挖掘其中有利于运动健康的要素，并提出适用于大众的运动健康促进策略，填补该领域的研究空白。\n\n## 研究背景\n### 文献综述\n#### 支持理论\n运动生理学、运动心理学等理论为研究乒乓球运动对健康的影响提供了基础。相关研究表明，乒乓球运动能提高人体的神经反应速度、增强肌肉力量和关节灵活性。\n#### 争议领域\n对于不同乒乓球技战术在运动健康促进方面的效果存在争议，部分研究认为某些高难度技战术对普通大众的健康促进作用有限，甚至可能带来运动损伤风险。\n#### 空白区间\n尚未有研究针对特定优秀运动员的技战术进行全面的运动健康分析，尤其是张继科这种具有独特风格的运动员。\n### 技术演进路线图\n从乒乓球运动的起源到现代竞技的发展，技战术不断演变。张继科的出现为乒乓球技战术带来了新的变革，其快速、凶狠、灵活的打法成为现代乒乓球的代表风格。本研究定位于挖掘这种独特技战术在运动健康领域的应用。\n### 现有方法缺陷的SWOT矩阵分析\n#### 优势（Strengths）\n现有乒乓球技战术分析方法在竞技层面较为成熟，能准确评估运动员的技术水平。\n#### 劣势（Weaknesses）\n缺乏对运动健康维度的考量，忽略了大众运动的实际需求和能力限制。\n#### 机会（Opportunities）\n结合运动健康理念，为乒乓球技战术分析提供了新的研究方向和应用场景。\n#### 威胁（Threats）\n可能受到传统竞技分析思维的束缚，难以突破现有研究框架。\n\n## 研究目的\n### 理论目标\n构建基于张继科技战术的运动健康促进理论模型，揭示乒乓球技战术与运动健康之间的内在联系。\n### 方法目标\n在一年内，通过对张继科比赛视频的分析和大众运动实验，制定一套适用于不同年龄段和运动水平人群的乒乓球运动健康促进方案，并使参与实验人群的运动健康指标平均提升15%。\n\n## 研究方法\n### 技术路线图\n#### 基础理论\n运用运动生理学、运动心理学和体育统计学等理论，为研究提供理论支撑。\n#### 关键技术\n采用视频分析技术对张继科的技战术进行拆解和量化分析，结合运动监测设备收集大众运动数据。\n#### 验证方案\n设计对照实验，将参与实验人群分为实验组和对照组，实验组采用基于张继科技战术的运动方案，对照组采用传统乒乓球运动方案。\n#### 分析工具\n使用SPSS软件对实验数据进行统计分析，验证运动方案的有效性。\n### 实验设计矩阵\n#### 变量控制组\n设置不同年龄段（青年组、中年组、老年组）和运动水平（初级、中级、高级）的实验组和对照组。\n#### 观测指标\n包括心肺功能、肌肉力量、反应速度、身体协调性等运动健康指标。\n#### 数据采集方式\n通过运动监测设备、问卷调查和现场测试等方式收集数据。\n### 创新方法说明\n本研究创新性地将竞技乒乓球技战术与运动健康相结合，为避免专利壁垒，研究方法主要基于公开的比赛视频和通用的运动监测技术。\n\n## 预期结果\n### 预设多级验证体系\n#### 仿真数据\n通过计算机模拟分析张继科技战术在不同运动场景下对人体运动健康指标的影响。\n#### 对照实验\n对比实验组和对照组在实验前后的运动健康指标变化，验证运动"
 
-    do {
-      processed = false;
-
-      // 每个处理函数返回是否成功处理
-      if (buffer.current.indexOf('#', curIndexRef.current) !== -1) {
-        const result = processTitle('# ');
-        if (result === -1) {
-          // 如果没找到完整段落，等待下次处理
-          break;
-        } else {
-          processed = true;
-        }
-      }
-      else if (buffer.current.indexOf('##', curIndexRef.current) !== -1) {
-        const result = processHeading('## ');
-        if (result === -1) {
-          // 如果没找到完整段落，等待下次处理
-          break;
-        } else {
-          processed = true;
-        }
-      }
-      else if (buffer.current.indexOf('###', curIndexRef.current) !== -1) {
-        const result = processHeading('### ');
-        if (result === -1) {
-          // 如果没找到完整段落，等待下次处理
-          break;
-        } else {
-          processed = true;
-        }
-      }
-      else {
-        continue;
-      }
-      // 当任一处理成功时继续循环（可能处理多个块）
-    } while (processed);
+    const titlePattern = /^# /;
+    const heading2Pattern = /^## /;
+    const heading3Patter = /^### /;
+    // 使用精确的匹配模式
+    if (titlePattern.test(buffer.current.substring(curIndexRef.current))) {
+      processTitle('# ');
+    }
+    else if (heading2Pattern.test(buffer.current.substring(curIndexRef.current))) {
+      processHeading('## ');
+    }
+    else if (heading3Patter.test(buffer.current.substring(curIndexRef.current))) {
+      processHeading('### ');
+    }
   }
 
   return {
@@ -311,13 +289,13 @@ const DragAndDropDemo = () => {
   }, [article])
 
 
-
-  useEffect(() => {
-    if (inputVal) {
-      processChar(inputVal);
-    }
-  }, [inputVal]
-  )
+  processChar(inputVal);
+  // useEffect(() => {
+  //   if (inputVal) {
+  //     processChar(inputVal);
+  //   }
+  // }, [inputVal]
+  // )
 
   return (
     <>
