@@ -72,6 +72,8 @@ interface DraggableItem {
   description: string;
   type: 'chapter' | 'section';
   level: number;
+  originalIndex: number;
+  chapterIndex?: number;  // 可选属性，因为章节不需要这个属性
 }
 
 // DropResult 接口定义
@@ -92,7 +94,7 @@ interface DropResult {
 // 用于处理流式输入的字符并构建大纲结构
 const useStreamProcessor = () => {
   const buffer = useRef<string>('');
-  const curIndexRef = useRef<number>(0);
+  const curIndexRef = useRef<number>(8);
   // 存储所有已完成的章节的状态
   const [article, setArticle] = useState<Article>({
     id: crypto.randomUUID(),
@@ -109,10 +111,13 @@ const useStreamProcessor = () => {
         ...prev,
         title
       }))
+
     }
 
     else if (line.startsWith('## ')) {
       const title = line.slice(3).trim();
+      // 确保章节标题不为空
+      if (!title) return;
 
       const newChapter = {
         id: crypto.randomUUID(),
@@ -123,7 +128,7 @@ const useStreamProcessor = () => {
 
       setArticle(prev => ({
         ...prev,
-        chapters: [...prev.chapters, newChapter]
+        chapters: prev.chapters.map(ch => ({...ch})).concat(newChapter)
       }));
     }
 
@@ -144,7 +149,10 @@ const useStreamProcessor = () => {
       }
 
       setArticle(prev => {
-        const chapters = [...prev.chapters];
+        const chapters = prev.chapters.map(ch => ({
+          ...ch,
+          sections: [...ch.sections]
+        }));
         const currentChapter = chapters[chapters.length - 1];
         currentChapter.sections.push(newSection);
         return { ...prev, chapters };
@@ -167,11 +175,11 @@ const useStreamProcessor = () => {
     processLine(`# ${title}`);
 
     curIndexRef.current = end + 2;
-    return curIndexRef.current;
   }
 
   // 修改 processHeading 函数
   const processHeading = (marker: string) => {
+    
     // 使用严格匹配模式：换行符 + 标记 + 空格
     const start = buffer.current.indexOf(marker, curIndexRef.current);
 
@@ -186,33 +194,32 @@ const useStreamProcessor = () => {
     };
 
     // 提取完整标题内容（从标记结尾到换行符）
-    const titleContent = buffer.current.slice(marker.length, start - 1).trim();
+    const titleContent = buffer.current.slice(start + marker.length, lineEnd).trim();
 
     // 修改原有的内容结束位置查找逻辑  
     if (marker === '### ') {
-      const contentEnd = buffer.current.indexOf('\n\n', lineEnd);
+      const contentEnd = buffer.current.indexOf('\n', lineEnd + 1);
       if (contentEnd === -1) return;
-      curIndexRef.current = contentEnd;
+      curIndexRef.current = contentEnd + 1;
+  
       const content = buffer.current.slice(lineEnd, contentEnd).trim();
       processLine(`### ${titleContent}\n${content}`);
-    } else if (marker === '##') {
+    } else if (marker === '## ') {
       processLine(`## ${titleContent}`);
-      curIndexRef.current = lineEnd;
+      curIndexRef.current = lineEnd + 1;
     }
-
-    return curIndexRef.current;
   }
 
 
   // 增强的 processChar 方法
   const processChar = (text: string) => {
-    // buffer.current = text;
-    debugger
-    buffer.current = "\# SCI论文大纲：基于张继科技战术分析的运动健康促进研究\n\n## 引言\n### 领域重要性\n运动健康领域在现代社会备受关注，体育活动不仅能增强身体素质，还对心理健康产生积极影响。乒乓球作为一项全球性的体育运动，具有广泛的群众基础和竞技价值。它能有效锻炼人体的反应速度、协调能力和心肺功能等，对不同年龄段人群的健康都有着重要意义。\n### 关键矛盾\n尽管乒乓球运动的健康益处已被广泛认可，但对于优秀运动员技战术中蕴含的运动健康促进要素尚未得到充分挖掘。现有研究多集中在竞技层面的技术分析，忽略了其对大众运动健康的指导价值。\n### 知识缺口\n目前缺乏从运动健康视角系统分析优秀乒乓球运动员技战术的研究，无法为大众提供基于专业运动员经验的科学运动建议。\n### 本文定位\n本文旨在深入剖析张继科的技战术特点，挖掘其中有利于运动健康的要素，并提出适用于大众的运动健康促进策略，填补该领域的研究空白。\n\n## 研究背景\n### 文献综述\n#### 支持理论\n运动生理学、运动心理学等理论为研究乒乓球运动对健康的影响提供了基础。相关研究表明，乒乓球运动能提高人体的神经反应速度、增强肌肉力量和关节灵活性。\n#### 争议领域\n对于不同乒乓球技战术在运动健康促进方面的效果存在争议，部分研究认为某些高难度技战术对普通大众的健康促进作用有限，甚至可能带来运动损伤风险。\n#### 空白区间\n尚未有研究针对特定优秀运动员的技战术进行全面的运动健康分析，尤其是张继科这种具有独特风格的运动员。\n### 技术演进路线图\n从乒乓球运动的起源到现代竞技的发展，技战术不断演变。张继科的出现为乒乓球技战术带来了新的变革，其快速、凶狠、灵活的打法成为现代乒乓球的代表风格。本研究定位于挖掘这种独特技战术在运动健康领域的应用。\n### 现有方法缺陷的SWOT矩阵分析\n#### 优势（Strengths）\n现有乒乓球技战术分析方法在竞技层面较为成熟，能准确评估运动员的技术水平。\n#### 劣势（Weaknesses）\n缺乏对运动健康维度的考量，忽略了大众运动的实际需求和能力限制。\n#### 机会（Opportunities）\n结合运动健康理念，为乒乓球技战术分析提供了新的研究方向和应用场景。\n#### 威胁（Threats）\n可能受到传统竞技分析思维的束缚，难以突破现有研究框架。\n\n## 研究目的\n### 理论目标\n构建基于张继科技战术的运动健康促进理论模型，揭示乒乓球技战术与运动健康之间的内在联系。\n### 方法目标\n在一年内，通过对张继科比赛视频的分析和大众运动实验，制定一套适用于不同年龄段和运动水平人群的乒乓球运动健康促进方案，并使参与实验人群的运动健康指标平均提升15%。\n\n## 研究方法\n### 技术路线图\n#### 基础理论\n运用运动生理学、运动心理学和体育统计学等理论，为研究提供理论支撑。\n#### 关键技术\n采用视频分析技术对张继科的技战术进行拆解和量化分析，结合运动监测设备收集大众运动数据。\n#### 验证方案\n设计对照实验，将参与实验人群分为实验组和对照组，实验组采用基于张继科技战术的运动方案，对照组采用传统乒乓球运动方案。\n#### 分析工具\n使用SPSS软件对实验数据进行统计分析，验证运动方案的有效性。\n### 实验设计矩阵\n#### 变量控制组\n设置不同年龄段（青年组、中年组、老年组）和运动水平（初级、中级、高级）的实验组和对照组。\n#### 观测指标\n包括心肺功能、肌肉力量、反应速度、身体协调性等运动健康指标。\n#### 数据采集方式\n通过运动监测设备、问卷调查和现场测试等方式收集数据。\n### 创新方法说明\n本研究创新性地将竞技乒乓球技战术与运动健康相结合，为避免专利壁垒，研究方法主要基于公开的比赛视频和通用的运动监测技术。\n\n## 预期结果\n### 预设多级验证体系\n#### 仿真数据\n通过计算机模拟分析张继科技战术在不同运动场景下对人体运动健康指标的影响。\n#### 对照实验\n对比实验组和对照组在实验前后的运动健康指标变化，验证运动"
-
+    // debugger;
+    // buffer.current = `() => ""# SCI论文大纲：基于张继科技战术分析的运动健康研究\n\n## 引言\n### 领域重要性\n运动健康领域对于提升人类身体素质、预防疾病和促进社会健康发展具有至关重要的意义。乒乓球作为一项全球性的体育运动，不仅具有高度的竞技性，还对参与者的身体协调性、反应速度、心肺功能等多个方面有着积极的影响。\n\n### 关键矛盾\n在当前的运动健康研究中，虽然对乒乓球运动的整体益处有一定的认识，但对于特定优秀运动员技战术背后所蕴含的运动健康价值挖掘不足。一方面，大量研究集中在乒乓球运动的普及和基础训练方面；另一方面，对于顶尖运动员独特技战术在运动健康促进中的具体机制和应用缺乏深入探讨。\n\n### 知识缺口\n目前尚未有系统的研究将张继科的技战术特点与运动健康指标进行关联分析，对于其技战术所引发的身体生理和心理变化的具体过程和影响程度存在知识空白。\n\n### 本文定位\n本文旨在填补这一知识缺口，通过对张继科技战术的深入剖析，揭示其在运动健康促进方面的潜在价值，为乒乓球运动以及其他体育运动的健康推广提供新的理论和实践依据。\n\n### 新颖性三角\n - **理论空白**：首次将张继科的技战术与运动健康理论相结合，拓展了运动健康研究的理论边界。\n - **方法创新**：采用多学科交叉的研究方法，综合运用运动学、生理学、心理学等多领域的研究手段，全面分析技战术对身体的影响。\n - **应用突破**：研究成果有望应用于乒乓球教学、健身指导等实际场景，为提高运动健康水平提供新的策略。\n\n## 研究背景\n### 支持理论\n - 运动生理学理论表明，乒乓球运动可以提高人体的心肺功能、肌肉力量和关节灵活性。\n - 运动心理学理论指出，乒乓球运动有助于提高注意力、反应能力和心理韧性。\n - 技战术分析理论为研究张继科的独特打法提供了方法和框架。\n\n### 争议领域\n - 对于乒乓球技战术与运动健康之间的具体因果关系存在不同观点，部分研究认为技战术的影响相对较小，而更多取决于运动的强度和时长。\n - 在评估技战术对身体各系统的影响程度上，不同研究得出的结论存在差异。\n\n### 空白区间\n - 缺乏对特定优秀运动员技战术在运动健康促进方面的个性化研究。\n - 对于技战术在不同年龄段、性别和运动水平人群中的应用效果缺乏深入探讨。\n\n### 技术演进路线图\n - 回顾乒乓球运动技战术的发展历程，从传统的近台快攻到现代的弧圈球结合快攻等打法的演变。\n - 标注本研究在这一技术演进过程中的时空坐标，即聚焦于张继科在当代乒乓球技战术发展中的独特地位和创新之处。\n\n### 现有方法缺陷的SWOT矩阵分析\n - **优势（S）**：现有的运动健康研究方法在数据采集和分析方面已经相对成熟，能够对身体的各项指标进行较为准确的测量。\n - **劣势（W）**：传统研究方法往往忽视了运动员个体的技战术特点，缺乏对特定技战术与运动健康之间复杂关系的深入挖掘。\n - **机会（O）**：多学科交叉研究的兴起为全面分析技战术对运动健康的影响提供了新的机遇。\n - **威胁（T）**：不同研究方法之间的兼容性和整合难度较大，可能导致研究结果的不一致性。\n\n## 研究目的\n### 理论目标\n - 构建张继科技战术与运动健康指标之间的理论模型，揭示技战术对身体生理和心理变化的作用机制。\n - 丰富和完善运动健康领域的理论体系，为后续相关研究提供新的理论基础。\n\n### 方法目标\n - 开发一套适用于分析张继科技战术对运动健康影响的综合研究方法。\n - 验证该研究方法的有效性和可靠性，为实际应用提供科学依据。\n\n### SMART原则表述\n - **Specific**：明确聚焦于张继科的技战术特点以及其对运动健康的影响。\n - **Measurable**：通过具体的生理指标（如心率、血压、肌肉力量等）和心理指标（如注意力、焦虑水平等）来衡量研究结果。\n - **Achievable**：利用现有的研究设备和技术手段，结合多学科的专业知识，确保研究目标的可实现性。\n - **Relevant**：研究结果与运动健康领域的实际需求相关，对乒乓球教学、健身指导等具有实际应用价值。\n - **Time - bound**：设定明确的研究时间节点，确保研究在规定的时间内完成。\n\n## 研究方法\n### 技术路线图\n - **基础理论**：运用运动生理学、运动心理学、技战术分析等基础理论，为研究提供理论支撑。\n - **关键技术**：采用高速摄像机、运动传感器、生理监测设备等技术手段，采集张继科技战术动作和身体生理指标数据。\n - **验证方案**：设计对照实验，将受试者分为实验组和对照组，实验组接受基于张继科技战术的训练，对照组采用传统乒乓球训练方法，对比两组在运动健康指标上的变化。\n - **分析工具**：运用统计学软件、运动分析软件等对采集的数据进行分析和处理。\n\n### 实验设计矩阵\n - **变量控制组**：实验组（基于张继科技战术训练）和对照组（传统乒乓球训练）。\n - **观测指标**：生理指标（心率、血压、肌肉力量、关节活动度等）、心理指标（注意力、反应速度、焦虑水平等）、运动技能指标（击球速度、旋转、准确性等）。\n - **数据采集方式**：在训练前后分别采集受试者的各项指标数据，采用问卷调查、现场测试等方式进行数据收集。\n\n### 创新方法需说明专利壁垒规避策略\n本研究采用的创新方法主要是多学科交叉的研究思路和综合分析方法，不涉及专利技术。在研究过程中，将遵循相关的知识产权法律法规，确保研究的合法性和合规性。\n\n## 预期结果\n### 预设多级验证体系\n - **仿真数据**：通过计算机模拟技术，对张继科技战术动作进行仿真分析，预测其对身体生理和心理指标的影响。\n - **对照实验**：通过实际的对照实验，对比实验组和对照组在运动健康指标上的差异，验证仿真数据的准确性。\n - **第三方复现**：邀请其他研究团队对本研究进行复现，进一步验证研究结果的可靠性和普遍性。\n\n### 成果展示维度\n - **定量指标**：评估基于张继科技战术的训练方法在提高心率变异性、增强肌肉力量、提高反应速度等方面的效率提升百分比。\n - **定性突破**：揭示技战术对身体运动控制机制、心理调节机制等方面的创新影响。\n - **应用场景**：探讨研究成果在乒乓球教学、青少年体育培训、康复训练等不同应用场景中的具体应用策略。\n\n## 讨论\n### 建立三层对话机制\n - **与经典理论对话**：将研究结果与运动生理学、运动心理学等经典理论进行对比分析，验证和拓展现有理论。\n - **与同类研究对话**：与其他关于乒乓球运动和运动健康的研究进行比较，分析本研究的优势和不足，为后续研究提供参考。\n - **与行业实践对话**：与乒乓球教练、健身专家等行业实践人员进行交流，探讨研究成果在实际应用中的可行性和改进方向。\n\n### 意外发现分析框架\n - **现象描述**：如果在研究过程中发现了意外的现象，如某种技战术对特定人群的特殊影响等，详细描述该现象的表现和特征。\n - **归因推理**：运用科学的方法对意外现象进行归因分析，找出可能的原因和影响因素。\n - **理论重构**：根据归因分析的结果，对现有的理论模型进行必要的重构和完善，以更好地解释和预测研究现象。\n\n## 结论\n### 成果转化双路径\n - **理论贡献**：本研究构建的张继科技战术与运动健康指标之间的理论模型，为运动健康领域的范式演进提供了新的思路和方向。\n - **实践价值**：研究成果可以应用于乒乓球教学、健身指导、康复训练等实际场景，为提高人们的运动健康水平提供具体的方法和策略。\n\n### 局限性的三维表述\n - **方法边界**：本研究采用的研究方法可能存在一定的局限性，如实验样本的选择范围有限、数据采集的精度和准确性可能受到设备和环境的影响等。\n - **数据范围**：研究数据主要集中在乒乓球运动领域，对于其他体育运动的推广和应用可能存在一定的局限性。\n - **应用场景**：研究成果在不同的应用场景中可能需要进行适当的调整和优化，以适应不同人群和环境的需求。`
+    // console.log(111, buffer.current.substring(curIndexRef.current));
+    buffer.current = text;
     const titlePattern = /^# /;
     const heading2Pattern = /^## /;
-    const heading3Patter = /^### /;
+    const heading3Pattern = /(?:^|\n)### /;  // 匹配开头或换行后的 ###
     // 使用精确的匹配模式
     if (titlePattern.test(buffer.current.substring(curIndexRef.current))) {
       processTitle('# ');
@@ -220,7 +227,7 @@ const useStreamProcessor = () => {
     else if (heading2Pattern.test(buffer.current.substring(curIndexRef.current))) {
       processHeading('## ');
     }
-    else if (heading3Patter.test(buffer.current.substring(curIndexRef.current))) {
+    else if (heading3Pattern.test(buffer.current.substring(curIndexRef.current))) {
       processHeading('### ');
     }
   }
@@ -263,22 +270,25 @@ const DragAndDropDemo = () => {
     // 定于转换函数
     const convertToItems = () => {
       const newItems: DraggableItem[] = [];
-      article.chapters.forEach(chapter => {
+      article.chapters.forEach((chapter, chapterIndex) => {
         newItems.push({
-          id: chapter.id,
+          id: `chapter-${chapter.id}`,
           content: chapter.title,
           description: '',
           type: 'chapter',
-          level: 1
+          level: 1,
+          originalIndex: chapterIndex
         })
 
-        chapter.sections.forEach(section => {
+        chapter.sections.forEach((section, sectionIndex) => {
           newItems.push({
-            id: section.id,
+            id: `section-${section.id}`,
             content: section.title,
             description: section.content,
             type: 'section',
-            level: 2
+            level: 2,
+            originalIndex: sectionIndex,
+            chapterIndex: chapterIndex
           })
         })
       })
@@ -288,14 +298,15 @@ const DragAndDropDemo = () => {
     convertToItems();
   }, [article])
 
-
-  processChar(inputVal);
-  // useEffect(() => {
-  //   if (inputVal) {
-  //     processChar(inputVal);
-  //   }
-  // }, [inputVal]
-  // )
+  // processChar(inputVal);
+  
+  useEffect(() => {
+    console.log(222, inputVal)
+    if (inputVal) {
+      processChar(inputVal);
+    }
+  }, [inputVal]
+  )
 
   return (
     <>
