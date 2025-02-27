@@ -3,10 +3,16 @@ import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown';
-// import MarkdownExtension from '@tiptap/extension-markdown'; // 导入 Markdown 扩展
-
 import { useOutlineStore } from '@store/outline'
 
+// zustand接口
+type State = {
+    inputVal: string;
+    paper: string;
+    endOutlineMarker: boolean;  // 大纲终止标记
+  }
+
+  
 // define your extension array
 const extensions = [
     StarterKit.configure({
@@ -20,8 +26,10 @@ const extensions = [
     })
 ]
 
+
+
 const Tiptap = () => {
-    const paper = useOutlineStore((state) => state.paper);
+    const paper = useOutlineStore((state: State) => state.paper);
     
     const editor = useEditor({
         extensions,

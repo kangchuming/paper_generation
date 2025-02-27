@@ -7,7 +7,7 @@ const API_BASE_URL = 'http://localhost:3000';
 export async function fetchOutline(message: string) {
     try {
         const updateInputVal = useOutlineStore.getState().updateInputVal;
-
+        const updateEndOutlineMarker = useOutlineStore.getState().updateEndOutlineMarker;
         // 在开始新的请求时清空内容
         updateInputVal(() => '');
 
@@ -54,6 +54,7 @@ export async function fetchOutline(message: string) {
             },
 
             onclose() {
+                updateEndOutlineMarker(true);
                 console.log('Connection closed');
             },
         })
@@ -79,12 +80,22 @@ export async function fetchPaper(message: string) {
             body: JSON.stringify({ message }),
 
             onmessage(event) {
-                // 处理每个事件消息
-                const text = event.data;
-                console.log('Received:', text);
+                if (event.event === 'FatalError') {
+                    throw new Error(event.data);
+                }
+                
+                const data = JSON.parse(event.data);
+                try {  
+                    if (data.isLastMessage === true) {
+                        return;
+                    }
+                    // 使用更灵活的正则表达式匹配
+                    const content = data.content.replace(/^-\s*\*{0,2}([^*]*)\*{0,2}/, '$1');
+                    updatePaper(content);
 
-                // 更新 store 中的 paper 内容
-                updatePaper((prevPaper) => prevPaper + text);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                }
             },
 
             onopen(response) {
