@@ -1,14 +1,23 @@
 {
-    "rewrites": [
-        {
-            "source": "/(.*)",
-            "destination": "/index.html"
-        }
-    ],
     "routes": [
         {
+            "src": "/.*",
+            "dest": "/index.html"
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "/backend/api/$1"
+        },
+        {
+            "src": "/old-path",
+            "dest": "/new-path",
+            "status": 301
+        },
+        {
             "src": "/(.*)",
-            "dest": "/src/backend/src/app.js"
+            "headers": {
+                "Cache-Control": "public, max-age=3600"
+            }
         }
     ]
 }
