@@ -12,8 +12,6 @@ const __dirname = path.dirname(__filename);
 // 配置 dotenv，这行必须在使用任何环境变量之前
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 // 添加一些调试日志
-console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY);
-console.log('OPENAI_BASE_URL:', process.env.OPENAI_BASE_URL);
 const app = express();
 const PORT = 3000;
 
@@ -108,3 +106,4 @@ app.listen(PORT, () => {
     console.log(`服务器正在运行在 http://localhost:${PORT}`);
 });
 
+export default app;
