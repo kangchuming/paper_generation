@@ -1,12 +1,12 @@
 {
     "routes": [
         {
-            "src": "/.*",
-            "dest": "/index.html"
+            "src": "/frontend/(.*)",
+            "dest": "/src/frontend/index.html"
         },
         {
-            "src": "/api/(.*)",
-            "dest": "/backend/api/$1"
+            "src": "/backend/(.*)",
+            "dest": "/src/backend/app.js"
         },
         {
             "src": "/old-path",
@@ -18,6 +18,12 @@
             "headers": {
                 "Cache-Control": "public, max-age=3600"
             }
+        }
+    ],
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/backend"
         }
     ]
 }

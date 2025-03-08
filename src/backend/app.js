@@ -20,11 +20,6 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 显式处理 favicon.ico 请求（可选）
-app.get('/favicon.ico', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'favicon.ico'));
-  });
-
 // 确保环境变量存在
 if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
     console.error('Missing required environment variables');
@@ -34,6 +29,11 @@ if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     baseURL: process.env.OPENAI_BASE_URL,
+});
+
+// 显式处理 favicon.ico 请求（可选）
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'favicon.ico'));
 });
 
 // 定义根路由
@@ -113,10 +113,13 @@ async function main(message, res) {
 }
 
 // 启动服务器
-if(process.env.NODE_ENV !== 'production'){
+if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`服务器正在运行在 http://localhost:${PORT}`);
     });
 }
 
-export default app;
+
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
