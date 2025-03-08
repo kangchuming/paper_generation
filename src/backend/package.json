@@ -2,19 +2,22 @@
   "name": "backend",
   "version": "1.0.0",
   "main": "app.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "echo 'No build needed' && exit 0"
+    "build": "echo 'No build needed' && exit 0",
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "openai": "^4.76.0"
-  },
-  "type": "module"
+    "openai": "^4.85.2"
+  }
 }
