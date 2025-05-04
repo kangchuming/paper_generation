@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/server/src/app.js", 
+      "use": "@vercel/node"
+    },
+    {
+      "src": "src/client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],"env": {
+    "DEBUG": "true",
+    "OPENAI_API_KEY": "bdaebe0f-2da7-476b-855a-a1bbea3ada4e",
+    "OPENAI_API_BASE": "https://ark.cn-beijing.volces.com/api/v3"
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "src/server/src/app.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/client/dist/$1"
+    }
+  ]
+}

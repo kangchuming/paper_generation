@@ -1,0 +1,9 @@
+# 将所有文本文件的行尾统一设置为 LF
+* text=auto eol=lf
+
+# 特定文件类型设置
+*.{cmd,[cC][mM][dD]} text eol=crlf
+*.{bat,[bB][aA][tT]} text eol=crlf
+
+# 二进制文件不转换
+*.{png,jpg,jpeg,gif,webp,woff,woff2} binary
