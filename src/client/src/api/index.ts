@@ -1,7 +1,7 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useOutlineStore } from '@store/outline';
 
-const API_BASE_URL = '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // 调用大纲生成接口
 export async function fetchOutline(message: string) {
