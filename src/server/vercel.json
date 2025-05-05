@@ -9,6 +9,13 @@
     "routes": [
         {
             "src": "/api/(.*)",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "headers": {
+                "Access-Control-Allow-Origin": "https://paper-generation-client.vercel.app",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Allow-Credentials": "true"
+            },
             "dest": "/app.js"
         },
         {

@@ -16,8 +16,33 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 const app = express();
 const PORT = 3000;
 
+// CORS 配置
+const allowedOrigins = [
+    'https://paper-generation-client.vercel.app',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // 允许没有origin的请求（比如移动端app）
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+
 //中间件
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // 添加根路由处理
@@ -43,7 +68,8 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
     try {
         // 移除不必要的 response 写入，直接调用 main
@@ -60,26 +86,6 @@ app.post('/api/chat/stream', async (req, res) => {
     req.on('close', () => {
         res.end();
     });
-});
-
-// 定义处理 POST 请求的路由
-app.post('/api/chat/paper/stream', async (req, res) => {
-    const { message } = req.body;
-
-    // 设置响应头以支持 SSE
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    // 调用 main 函数并传递 message
-    try {
-        const response = await main(message, res);
-        res.write(`data: ${JSON.stringify({ response })}\n\n`); // 发送数据
-        // res.flush(); // 确保数据立即发送
-    } catch (error) {
-        console.error('处理请求是出错：', err);
-        res.status(500).json({ error: '内部服务器错误' });
-    }
 });
 
 // Image input:
