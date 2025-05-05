@@ -1,12 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node src/app.js",
+    "start": "node app.js",
     "build": "cd client && npm install && npm run build",
     "dev": "concurrently \"npm run server\" \"cd client && npm start\"",
-    "server": "node src/app.js"
+    "server": "node app.js"
   },
   "author": "",
   "license": "ISC",
@@ -22,7 +22,7 @@
     "express": "^4.21.2",
     "langchain": "^0.3.19",
     "langsmith": "^0.3.14",
-    "openai": "^4.76.0",
+    "openai": "^4.97.0",
     "zod": "^3.24.2"
   },
   "type": "module",
