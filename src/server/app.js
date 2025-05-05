@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // 配置 dotenv，这行必须在使用任何环境变量之前
 dotenv.config({ path: path.resolve(__dirname, '.env') });
+
 // 添加一些调试日志
 const app = express();
 const PORT = 3000;
@@ -18,6 +19,11 @@ const PORT = 3000;
 //中间件
 app.use(cors());
 app.use(bodyParser.json());
+
+// 添加根路由处理
+app.get('/', (req, res) => {
+    res.json({ message: 'API is running' });
+});
 
 // 确保环境变量存在
 if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
@@ -76,7 +82,6 @@ app.post('/api/chat/paper/stream', async (req, res) => {
     }
 });
 
-
 // Image input:
 async function main(message, res) {
     try {
@@ -87,6 +92,7 @@ async function main(message, res) {
             model: 'doubao-1-5-lite-32k-250115',
             stream: true,
         });
+        
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
@@ -120,7 +126,7 @@ if (!process.env.VERCEL) {
     // 从环境变量获取初始端口或使用默认值3000
     const initialPort = parseInt(process.env.PORT, 10) || 3000;
     startServer(initialPort);
-  }
+}
   
-  // 使用ES模块导出语法
-  export default app;
+// 使用ES模块导出语法
+export default app;
