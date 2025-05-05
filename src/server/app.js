@@ -88,6 +88,28 @@ app.post('/api/chat/stream', async (req, res) => {
     });
 });
 
+// 定义处理 POST 请求的路由
+app.post('/api/chat/paper/stream', async (req, res) => {
+    const { message } = req.body;
+
+    // 设置响应头以支持 SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // 调用 main 函数并传递 message
+    try {
+        const response = await main(message, res);
+        res.write(`data: ${JSON.stringify({ response })}\n\n`); // 发送数据
+        // res.flush(); // 确保数据立即发送
+    } catch (error) {
+        console.error('处理请求是出错：', err);
+        res.status(500).json({ error: '内部服务器错误' });
+    }
+});
+
 // Image input:
 async function main(message, res) {
     try {
