@@ -1,7 +1,7 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useOutlineStore } from '@store/outline';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '';
+const API_BASE_URL = '';  // 使用相对路径，让 Vite 的代理来处理
 
 // 调用大纲生成接口
 export async function fetchOutline(message: string) {

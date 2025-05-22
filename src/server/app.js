@@ -20,7 +20,9 @@ const PORT = 3000;
 const allowedOrigins = [
     'https://paper-generation-client.vercel.app',
     'http://localhost:5173',
-    'http://127.0.0.1:5173'
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
 ];
 
 const corsOptions = {
@@ -31,6 +33,7 @@ const corsOptions = {
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
+            console.log('Blocked by CORS:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -71,20 +74,38 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
 
+    let isEnded = false;
+
+    // 设置超时时间（8秒，留出2秒缓冲）
+    const timeout = setTimeout(() => {
+        if (!isEnded && !res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: '请求超时，请重试' })}\n\n`);
+            res.end();
+            isEnded = true;
+        }
+    }, 8000);
+
     try {
-        // 移除不必要的 response 写入，直接调用 main
         console.log('Stream started');
         await main(message, res);
     } catch (error) {
         console.error('处理请求出错：', error);
-        res.write(`data: ${JSON.stringify({ error: '内部服务器错误' })}\n\n`);
-        res.end();
+        if (!isEnded && !res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: '内部服务器错误' })}\n\n`);
+            res.end();
+            isEnded = true;
+        }
     } finally {
+        clearTimeout(timeout);
         console.log('Stream ended');
     }
 
     req.on('close', () => {
-        res.end();
+        clearTimeout(timeout);
+        if (!isEnded && !res.writableEnded) {
+            res.end();
+            isEnded = true;
+        }
     });
 });
 
@@ -112,6 +133,8 @@ app.post('/api/chat/paper/stream', async (req, res) => {
 
 // Image input:
 async function main(message, res) {
+    let isEnded = false;
+    
     try {
         const stream = await openai.chat.completions.create({
             messages: [
@@ -122,16 +145,33 @@ async function main(message, res) {
         });
         
         for await (const chunk of stream) {
+            if (isEnded) break;
+            
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
-                res.write(`data: ${JSON.stringify({ content: content, isLastMessage: chunk.choices[0].finish_reason === 'stop' })}\n\n`);
+                try {
+                    if (!res.writableEnded) {
+                        res.write(`data: ${JSON.stringify({ content: content, isLastMessage: chunk.choices[0].finish_reason === 'stop' })}\n\n`);
+                    } else {
+                        isEnded = true;
+                        break;
+                    }
+                } catch(error) {
+                    console.error('写入数据时出错:', error);
+                    isEnded = true;
+                    break;
+                }
             }
         }
-        res.end();
     } catch (error) {
         console.error('处理消息时出错: ', error);
-        res.write(`data: ${JSON.stringify({ error: '处理消息时出错' })}\n\n`);
-        res.end();
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: '处理消息时出错' })}\n\n`);
+        }
+    } finally {
+        if (!res.writableEnded) {
+            res.end();
+        }
     }
 }
 
