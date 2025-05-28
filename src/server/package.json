@@ -3,30 +3,44 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "build": "cd client && npm install && npm run build",
-    "dev": "concurrently \"npm run server\" \"cd client && npm start\"",
-    "server": "node app.js"
+    "start": "node dist/app.js",
+    "build": "tsc -p tsconfig-esm.json",
+    "dev": "node --import tsx app.ts",
+    "server": "node --import tsx app.ts"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@langchain/community": "^0.3.36",
-    "@langchain/core": "0.3.0",
-    "@langchain/langgraph": "^0.2.57",
-    "@langchain/openai": "^0.4.5",
+    "@huggingface/inference": "^2.8.1",
+    "@langchain/community": "^0.3.0",
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/openai": "^0.3.0",
+    "@langchain/textsplitters": "^0.1.0",
     "body-parser": "^1.20.3",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "langchain": "^0.3.19",
-    "langsmith": "^0.3.14",
+    "langchain": "^0.3.0",
+    "langsmith": "^0.2.0",
     "openai": "^4.97.0",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
   },
   "type": "module",
   "resolutions": {
-    "@langchain/core": "0.3.0"
+    "@langchain/core": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.5",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.23",
+    "cross-env": "^7.0.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
   }
 }
