@@ -1,16 +1,17 @@
 import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatOpenAI,  OpenAIEmbeddings } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
+import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
 import { pull } from "langchain/hub";
-import { z } from "zod";
+import z from "zod";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { ByteDanceDoubaoEmbeddings } from "@langchain/community/embeddings/bytedance_doubao";
+import { Embeddings } from "@langchain/core/embeddings";
 
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
@@ -92,8 +93,14 @@ if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
 //     return END;
 // }
 
-const text =
-    "LangChain is the framework for building context-aware reasoning applications";
+const model = new AlibabaTongyiEmbeddings({
+    apiKey: process.env.DASHSCOPE_API_KEY,
+});
+const res = await model.embedQuery(
+  "What would be a good company name a company that makes colorful socks?"
+);
+console.log(11111, { res });
+
 
 const urls = [
     "https://lilianweng.github.io/posts/2023-06-23-agent/",
@@ -114,15 +121,16 @@ const textsplitter = new RecursiveCharacterTextSplitter({
 
 const docSplits = await textsplitter.splitDocuments(docsList);
 
-const embeddings = new ByteDanceDoubaoEmbeddings({
-    model: "Doubao-1.5-Embedding",
-    apiKey: process.env.BYTEDANCE_API_KEY || process.env.OPENAI_API_KEY,
-})
 
-const singleVector = await embeddings.embedQuery(text);
 
-console.log(singleVector.slice(0, 100));
 
+
+// const embeddings = new OpenAIEmbeddings({
+//     model: "text-embedding-3-large"
+//   });
+
+//   const res = await embeddings.embedQuery("Hello, world!");
+//   console.log(111,res);
 // 创建向量存储
 // const vectorStore = await MemoryVectorStore.fromDocuments(
 //     // docSplits,
@@ -130,16 +138,7 @@ console.log(singleVector.slice(0, 100));
 //     embeddings
 // );
 
-const vectorstore = await MemoryVectorStore.fromDocuments(
-    [{ pageContent: text, metadata: {} }],
-    embeddings
-);
 
-const retriever = vectorstore.asRetriever(1);
-
-const retrievedDocuments = await retriever.invoke("What is LangChain?");
-
-retrievedDocuments[0].pageContent;
 
 // // 创建检索工具
 // const tool = createRetrieverTool(
@@ -150,13 +149,13 @@ retrievedDocuments[0].pageContent;
 //     }
 // );
 
-const text2 =
-    "LangGraph is a library for building stateful, multi-actor applications with LLMs";
+// const text2 =
+//     "LangGraph is a library for building stateful, multi-actor applications with LLMs";
 
-const vectors = await embeddings.embedDocuments([text, text2]);
+// const vectors = await embeddings.embedDocuments([text, text2]);
 
-console.log(vectors[0].slice(0, 100));
-console.log(vectors[1].slice(0, 100));
+// console.log(vectors[0].slice(0, 100));
+// console.log(vectors[1].slice(0, 100));
 
 
 
