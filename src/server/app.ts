@@ -5,6 +5,8 @@ import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
 import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
+import { MilvusClient, DataType, InsertReq } from '@zilliz/milvus2-sdk-node';
+import { vectorsData } from './Data';
 import { pull } from "langchain/hub";
 import z from "zod";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
@@ -12,7 +14,6 @@ import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Embeddings } from "@langchain/core/embeddings";
-
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import path from 'path';
@@ -20,6 +21,12 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+
+interface StreamResponse {
+    content?: string;
+    error?: string;
+    isLastMessage?: boolean;
+}
 
 
 // TypeScript 中处理 ESM 的 __dirname
@@ -29,11 +36,89 @@ const __dirname = path.dirname(__filename);
 // 配置 dotenv
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
-interface StreamResponse {
-    content?: string;
-    error?: string;
-    isLastMessage?: boolean;
-}
+const COLLECTION_NAME = 'helo_milvus';
+
+// 设置milvus (本地Docker配置)
+const address = 'localhost:19530';  // Milvus默认端口
+const username = '';  // Docker版本默认无需用户名
+const password = '';  // Docker版本默认无需密码
+
+(async () => {
+    const milvusClient = new MilvusClient({
+        address: 'localhost:19530',
+        username: 'username',
+        password: 'Aa12345!!'
+    });
+
+    const create = await milvusClient.createCollection({
+        collection_name: COLLECTION_NAME,
+        fields: [
+            {
+                name: 'age',
+                description: 'ID field',
+                data_type: DataType.Int64,
+                is_primary_key: true,
+                autoID: true,
+            },
+            {
+                name: 'vector',
+                description: 'Vector field',
+                data_type: DataType.FloatVector,
+                dim: 8,
+            },
+            {name: 'height', description: 'int64 field', data_type: DataType.Int64},
+            {
+                name: 'name',
+                description: 'VarChar field',
+                data_type: DataType.VarChar,
+                max_length: 128,
+            },
+        ],
+    });
+    console.log('Create collection is finished.', create);
+
+    const params: InsertReq = {
+        collection_name: COLLECTION_NAME,
+        fields_data: vectorsData,
+    };
+
+    // 将数据导入集合
+    await milvusClient.insert(params);
+    console.log('Data is inserted.');
+
+    // 创建索引
+    const createIndex = await milvusClient.createIndex({
+        collection_name: COLLECTION_NAME,
+        field_name: 'vector',
+        metric_type: 'L2',
+    });
+
+    console.log('Index is created', createIndex);
+
+    // 搜索前需要加载集合
+    const load = await milvusClient.loadCollectionSync({
+        collection_name: COLLECTION_NAME,
+    });
+
+    console.log('Collection is loaded.', load);
+
+    // 搜索
+    for (let i=0;i<1;i++) {
+        console.time('Search time');
+        const search =await milvusClient.search({
+            collection_name: COLLECTION_NAME,
+            vector: vectorsData[i]['vector'],
+            output_fileds: ['age'],
+            limit: 5,
+        });
+        console.timeEnd('Search time');
+        console.log('Search result', search);
+    }
+
+    await milvusClient.dropCollection({
+        collection_name: COLLECTION_NAME
+    })
+})();
 
 // Express 应用配置
 const app = express();
@@ -99,7 +184,7 @@ const model = new AlibabaTongyiEmbeddings({
 const res = await model.embedQuery(
   "What would be a good company name a company that makes colorful socks?"
 );
-console.log(11111, { res });
+console.log({ res });
 
 
 const urls = [

@@ -28,7 +28,6 @@ const item: MenuItem[] = [
 ]
 
 export const Navigation = () => {
-    console.log(item, item.length);
     return (
   <motion.ul variants={variants}>
     {item.map(i => (
