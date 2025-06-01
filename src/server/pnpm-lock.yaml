@@ -16,7 +16,7 @@ importers:
         version: 2.8.1
       '@langchain/community':
         specifier: ^0.3.0
-        version: 0.3.36(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.51.1)(deepmerge@4.3.1)(dotenv@16.4.7)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(zod@3.24.2))(@huggingface/inference@2.8.1)(@ibm-cloud/watsonx-ai@1.6.0(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))))(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2)))(@zilliz/milvus2-sdk-node@2.5.9)(axios@1.9.0)(cheerio@1.0.0)(ibm-cloud-sdk-core@5.3.2)(jsonwebtoken@9.0.2)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(playwright@1.51.1)(ws@8.18.2)
+        version: 0.3.36(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.51.1)(deepmerge@4.3.1)(dotenv@16.4.7)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(zod@3.24.2))(@huggingface/inference@2.8.1)(@ibm-cloud/watsonx-ai@1.6.0(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))))(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2)))(@zilliz/milvus2-sdk-node@2.4.9)(axios@1.9.0)(cheerio@1.0.0)(ibm-cloud-sdk-core@5.3.2)(jsonwebtoken@9.0.2)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(playwright@1.51.1)(ws@8.18.2)
       '@langchain/core':
         specifier: ^0.3.0
         version: 0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))
@@ -33,8 +33,8 @@ importers:
         specifier: ^2.17.2
         version: 2.17.2
       '@zilliz/milvus2-sdk-node':
-        specifier: ^2.5.9
-        version: 2.5.9
+        specifier: 2.4.9
+        version: 2.4.9
       body-parser:
         specifier: ^1.20.3
         version: 1.20.3
@@ -722,10 +722,6 @@ packages:
     peerDependencies:
       '@langchain/core': ^0.3.0
 
-  '@opentelemetry/api@1.9.0':
-    resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
-    engines: {node: '>=8.0.0'}
-
   '@petamoriken/float16@3.9.2':
     resolution: {integrity: sha512-VgffxawQde93xKxT3qap3OH+meZf7VaSB5Sqd4Rqc+FP5alWbpOyan/7tRbOAvynjpG3GpdtAuGU/NdhQpmrog==}
 
@@ -848,8 +844,8 @@ packages:
   '@xenova/transformers@2.17.2':
     resolution: {integrity: sha512-lZmHqzrVIkSvZdKZEx7IYY51TK0WDrC8eR0c5IMnBsO8di8are1zzw8BlLhyO2TklZKLN5UffNGs1IJwT6oOqQ==}
 
-  '@zilliz/milvus2-sdk-node@2.5.9':
-    resolution: {integrity: sha512-cuTZDCFHXDwO63RaetSbu8TmFIcPm68uNW5AC61ApGsuKgKeVUBiC7vPV8qqfWgOq91WV236HxN+ZL4mR4u5GA==}
+  '@zilliz/milvus2-sdk-node@2.4.9':
+    resolution: {integrity: sha512-EuCwEE5jENkxk7JVCNxLjtw4BgxcucquzIOalqxhOBQ10P28wU+jFU1ETJpAen4g5FbNwlMCO9rwDaORKjlwSA==}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -2254,7 +2250,7 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@langchain/community@0.3.36(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.51.1)(deepmerge@4.3.1)(dotenv@16.4.7)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(zod@3.24.2))(@huggingface/inference@2.8.1)(@ibm-cloud/watsonx-ai@1.6.0(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))))(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2)))(@zilliz/milvus2-sdk-node@2.5.9)(axios@1.9.0)(cheerio@1.0.0)(ibm-cloud-sdk-core@5.3.2)(jsonwebtoken@9.0.2)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(playwright@1.51.1)(ws@8.18.2)':
+  '@langchain/community@0.3.36(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.51.1)(deepmerge@4.3.1)(dotenv@16.4.7)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(zod@3.24.2))(@huggingface/inference@2.8.1)(@ibm-cloud/watsonx-ai@1.6.0(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))))(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2)))(@zilliz/milvus2-sdk-node@2.4.9)(axios@1.9.0)(cheerio@1.0.0)(ibm-cloud-sdk-core@5.3.2)(jsonwebtoken@9.0.2)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(playwright@1.51.1)(ws@8.18.2)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.51.1)(deepmerge@4.3.1)(dotenv@16.4.7)(openai@4.97.0(ws@8.18.2)(zod@3.24.2))(zod@3.24.2)
       '@ibm-cloud/watsonx-ai': 1.6.0(@langchain/core@0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2)))
@@ -2274,7 +2270,7 @@ snapshots:
     optionalDependencies:
       '@browserbasehq/sdk': 2.5.0
       '@huggingface/inference': 2.8.1
-      '@zilliz/milvus2-sdk-node': 2.5.9
+      '@zilliz/milvus2-sdk-node': 2.4.9
       cheerio: 1.0.0
       jsonwebtoken: 9.0.2
       playwright: 1.51.1
@@ -2352,8 +2348,6 @@ snapshots:
     dependencies:
       '@langchain/core': 0.3.0(openai@4.97.0(ws@8.18.2)(zod@3.24.2))
       js-tiktoken: 1.0.19
-
-  '@opentelemetry/api@1.9.0': {}
 
   '@petamoriken/float16@3.9.2': {}
 
@@ -2480,11 +2474,10 @@ snapshots:
     transitivePeerDependencies:
       - bare-buffer
 
-  '@zilliz/milvus2-sdk-node@2.5.9':
+  '@zilliz/milvus2-sdk-node@2.4.9':
     dependencies:
       '@grpc/grpc-js': 1.13.4
       '@grpc/proto-loader': 0.7.15
-      '@opentelemetry/api': 1.9.0
       '@petamoriken/float16': 3.9.2
       dayjs: 1.11.13
       generic-pool: 3.9.0
