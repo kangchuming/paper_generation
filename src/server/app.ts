@@ -5,8 +5,9 @@ import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
 import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
-import { MilvusClient, InsertReq, DataType } from '@zilliz/milvus2-sdk-node';
-import { vectorsData } from './Data';
+import MilvusClient from '@zilliz/milvus2-sdk-node';
+import PDFVectorDB from './pdfVectordb.js';
+import { vectorsData } from './Data.js';
 import { pull } from "langchain/hub";
 import z from "zod";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
@@ -37,9 +38,18 @@ const __dirname = path.dirname(__filename);
 // 配置 dotenv
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+// 配置参数
+const config = {
+    collectionName: 'research_papers',
+    dimension: 1536,
+    pdfDirectory: "./table_tennis_papers", // PDF存放目录
+    chunkSize: 1500, // 文本块大小
+    chunkOverlap: 200 //块间重叠
+};
+
+
 const COLLECTION_NAME = 'data_query_example';
 
-// // 设置milvus (本地Docker配置)
 // const address = 'localhost:19530';  // Milvus默认端口
 // const username = '';  // Docker版本默认无需用户名
 // const password = '';  // Docker版本默认无需密码
@@ -166,210 +176,80 @@ if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
     process.exit(1);
 }
 
-// function shouldRetrieve(state: typeof GraphState.State): string {
-//     const { messages } = state;
-//     console.log("---DECIDE TO RETRIEVE---");
-//     const lastMessage = messages[messages.length - 1];
+async function testMilvus() {
+    try {
+        //  1. 初始化向量数据库
+        const pdfVectorDB = new PDFVectorDB(config);
 
-//     if("tool_calls" in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length) {
-//         console.log("---DECISION: RETRIEVE---");
-//         return "retrieve";
-//     }
+        // 2. 构建向量数据库
+        console.log('开始构建向量数据库...');
+        await pdfVectorDB.buildVectorDB();
+        console.log('向量数据库构建完成!');
 
-//     return END;
-// }
+        // 3. 测试搜索功能
+        console.log("\n测试搜索功能...");
+        const query = '张继科';
+        const topK = 3;
 
-const model = new AlibabaTongyiEmbeddings({
-    apiKey: process.env.DASHSCOPE_API_KEY,
-});
-const res = await model.embedQuery(
-    "What would be a good company name a company that makes colorful socks?"
-);
-console.log({ res });
+        console.log(`查询: "${query}"`);
+        const results = await pdfVectorDB.searchSimilarDocuments(query, topK);
 
+        // 4. 打印搜索结果
+        console.log("\n搜索结果:");
+        console.log("原始搜索结果:", JSON.stringify(results, null, 2));
+        
+        // 检查不同可能的数据结构
+        const searchData = results.data || results.results || results;
+        if (Array.isArray(searchData) && searchData.length > 0) {
+            searchData.forEach((doc: any, i: number) => {
+                // 尝试不同的字段名
+                const text = doc.text || doc.entity?.text || doc.fields?.text || '';
+                const source = doc.source || doc.entity?.source || doc.fields?.source || '';
+                const page = doc.page || doc.entity?.page || doc.fields?.page || 0;
+                const fileName = path.basename(source);
+                console.log(`${i + 1}. [${fileName} - 页 ${page}]`);
+                console.log(`   ${text.substring(0, 150)}...`);
+                console.log('-------------------------------------');
+            })
+        } else {
+            console.log("未找到相关结果");
+        }
 
-const urls = [
-    "https://lilianweng.github.io/posts/2023-06-23-agent/",
-    "https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/",
-    "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
-];
+        // 5. 性能测试
+        await testPerformance(pdfVectorDB);
+    } catch (error) {
+        console.error("主流程错误:", error);
+    }
+}
 
-const docs = await Promise.all(
-    urls.map((url) => new CheerioWebBaseLoader(url).load())
-)
+// 性能测试函数
+async function testPerformance(db: any) {
+    console.log("\n开始性能测试...");
 
-const docsList = docs.flat();
+    const testQueries = [
+        "张继科的技战术",
+        "张继科的反手",
+        "张继科的前三板",
+        "霸王拧",
+    ];
 
-const textsplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 100,
-    chunkOverlap: 10,
-})
+    const times = [];
 
-const docSplits = await textsplitter.splitDocuments(docsList);
+    for (const query of testQueries) {
+        const start = Date.now();
+        await db.searchSimilarDocuments(query, 3);
+        const duration = Date.now() - start;
+        times.push(duration);
+        console.log(`查询 "${query}" 耗时: ${duration}ms`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // 避免限流
+    }
 
-(async () => {
-    const milvusClient = new MilvusClient({
-        address: 'localhost:19530',
-        username: 'username',
-        password: 'Aa12345!!',
-    });
+    const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+    console.log(`\n平均查询时间: ${avgTime.toFixed(2)}ms`);
+}
 
-    console.log('Node client is initialized.');
-
-    // 创建集合
-    const create = await milvusClient.createCollection({
-        collection_name: COLLECTION_NAME,
-        consistency_level: 'Strong',
-        fields: [
-            {
-                name: 'id',
-                description: 'ID field',
-                data_type: 'Int64',
-                is_primary_key: true,
-                autoID: false
-            },
-            {
-                name: 'vector',
-                description: 'Vector filed',
-                data_type: 'FloatVector',
-                dim: 8,
-            }, 
-            {
-                name: 'height', description: 'int64 field', data_type: 'Int64'
-            },
-            {
-                name: 'name',
-                description: 'VarChar field',
-                data_type: 'VarChar',
-                max_length: 128,
-            }
-        ]
-    });
-    console.log('Create collection is finished.', create);
-
-    // 创建数据
-    const vectorsData = [
-        {
-          vector: [
-            0.11878310581111173, 0.9694947902934701, 0.16443679307243175,
-            0.5484226189097237, 0.9839246709011924, 0.5178387104937776,
-            0.8716926129208069, 0.5616972243831446,
-          ],
-          height: 20405,
-          name: 'zlnmh',
-          id: 1,
-        },
-        {
-          vector: [
-            0.9992090731236536, 0.8248790611809487, 0.8660083940881405,
-            0.09946359318481224, 0.6790698063908669, 0.5013786801063624,
-            0.795311915725105, 0.9183033261617566,
-          ],
-          height: 93773,
-          name: '5lr9y',
-          id: 2,
-        },
-        {
-          vector: [
-            0.8761291569818763, 0.07127366044153227, 0.775648976160332,
-            0.5619757601304878, 0.6076543120476996, 0.8373907516027586,
-            0.8556140171597648, 0.4043893119391049,
-          ],
-          height: 85122,
-          name: 'nes0j',
-          id: 3,
-        },
-        {
-          vector: [
-            0.5849602436079879, 0.5108258101682586, 0.8250884731578105,
-            0.7996354835509332, 0.8207766774911736, 0.38133662902290566,
-            0.7576720055508186, 0.4393152967662368,
-          ],
-          height: 92037,
-          name: 'ct2li',
-          id: 4,
-        },
-        {
-          vector: [
-            0.3768133716738886, 0.3823259261020866, 0.7906232829855262,
-            0.31693696726284193, 0.3731715403499176, 0.3300751870649885,
-            0.22353556137796238, 0.38062799545615444,
-          ],
-          height: 31400,
-          name: '6ghrg',
-          id: 5,
-        },
-        {
-          vector: [
-            0.0007531778212483964, 0.12941566118774994, 0.9340164428788116,
-            0.3795768837758642, 0.4532443258064389, 0.596455163143,
-            0.9529469158782906, 0.7692465408044873,
-          ],
-          height: 1778,
-          name: 'sb7mt',
-          id: 6,
-        },
-      ];
-
-      const params = {
-        collection_name: COLLECTION_NAME,
-        fields_data: vectorsData,
-    };
-
-    //   将数据注入集合
-    await milvusClient.insert(params);
-    console.log('Data is inserted');
-
-    // 创建索引
-    const createIndex = await milvusClient.createIndex({
-        collection_name: COLLECTION_NAME,
-        field_name: 'vector',
-        metric_type: 'L2',
-    });
-
-    console.log('Index is created', createIndex);
-
-    // 加载数据
-    const load = await milvusClient.loadCollectionSync({
-        collection_name: COLLECTION_NAME,
-    });
-    console.log('Collection is loaded.', load);
-
-    // 搜索
-    console.time('Query time');
-    const query = await milvusClient.query({
-        collection_name: COLLECTION_NAME,
-        filter: 'id > 0',
-        output_fields: ['id', 'height', 'vector'],
-        limit: 100,
-    });
-    console.timeEnd('Query time');
-    console.log('query result', query);
-
-    // 删除数据
-    const del = await milvusClient.delete({
-        collection_name: COLLECTION_NAME,
-        ids: [1,2],
-    })
-    console.log('del', del);
-
-    // 搜索
-    console.time('Query after del');
-    const queryAfterDel = await milvusClient.query({
-        collection_name: COLLECTION_NAME,
-        filter: 'id > 0',
-        output_fields: ['id', 'height', 'vector'],
-        limit: 100
-    });
-    console.timeEnd('Query after time');
-    console.log('query after del', queryAfterDel);
-    
-    // 丢弃集合
-    await milvusClient.dropCollection({
-        collection_name: COLLECTION_NAME
-    })
-})();
-
+// 运行向量数据库
+testMilvus();
 
 // const embeddings = new OpenAIEmbeddings({
 //     model: "text-embedding-3-large"

@@ -1,5 +1,3 @@
-import { SparseFloatVector } from "@zilliz/milvus2-sdk-node";
-
 // build example data
 export const vectorsData = [
   {
@@ -58,13 +56,13 @@ export const vectorsData = [
   },
 ];
 
-type sparseVectorsDataItem = {
-  vector: SparseFloatVector;
+type SparseVectorsDataItem = {
+  vector: { [key: string]: number };
   height: number;
   name: string;
 };
 
-export const sparseVectorsData : sparseVectorsDataItem[] = [
+export const sparseVectorsData : SparseVectorsDataItem[] = [
   {
     "vector": {"1": 0.1, "100": 0.3, "55": 0.324},
     "height": 20405,
@@ -95,5 +93,4 @@ export const sparseVectorsData : sparseVectorsDataItem[] = [
     "height": 1778,
     "name": "sb7mt"
   }
-]
-;
+];
