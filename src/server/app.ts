@@ -41,7 +41,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 // 配置参数
 const config = {
     collectionName: 'research_papers',
-    dimension: 1536,
+    dimension: 768,
     pdfDirectory: "./table_tennis_papers", // PDF存放目录
     chunkSize: 1500, // 文本块大小
     chunkOverlap: 200 //块间重叠
@@ -216,37 +216,37 @@ async function testMilvus() {
         }
 
         // 5. 性能测试
-        await testPerformance(pdfVectorDB);
+        // await testPerformance(pdfVectorDB);
     } catch (error) {
         console.error("主流程错误:", error);
     }
 }
 
 // 性能测试函数
-async function testPerformance(db: any) {
-    console.log("\n开始性能测试...");
+// async function testPerformance(db: any) {
+//     console.log("\n开始性能测试...");
 
-    const testQueries = [
-        "张继科的技战术",
-        "张继科的反手",
-        "张继科的前三板",
-        "霸王拧",
-    ];
+//     const testQueries = [
+//         "张继科的技战术",
+//         "张继科的反手",
+//         "张继科的前三板",
+//         "霸王拧",
+//     ];
 
-    const times = [];
+//     const times = [];
 
-    for (const query of testQueries) {
-        const start = Date.now();
-        await db.searchSimilarDocuments(query, 3);
-        const duration = Date.now() - start;
-        times.push(duration);
-        console.log(`查询 "${query}" 耗时: ${duration}ms`);
-        await new Promise(resolve => setTimeout(resolve, 500)); // 避免限流
-    }
+//     for (const query of testQueries) {
+//         const start = Date.now();
+//         await db.searchSimilarDocuments(query, 3);
+//         const duration = Date.now() - start;
+//         times.push(duration);
+//         console.log(`查询 "${query}" 耗时: ${duration}ms`);
+//         await new Promise(resolve => setTimeout(resolve, 500)); // 避免限流
+//     }
 
-    const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
-    console.log(`\n平均查询时间: ${avgTime.toFixed(2)}ms`);
-}
+//     const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+//     console.log(`\n平均查询时间: ${avgTime.toFixed(2)}ms`);
+// }
 
 // 运行向量数据库
 testMilvus();

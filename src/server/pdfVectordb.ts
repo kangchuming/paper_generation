@@ -1,12 +1,13 @@
 import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { MilvusClient, MetricType, IndexType } from "@zilliz/milvus2-sdk-node";
+import { MilvusClient, MetricType, IndexType, DataType } from "@zilliz/milvus2-sdk-node";
 import { Document } from "@langchain/core/documents";
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import EnhancedPDFProcessor from './pdfProcessor.js';
 
 interface PDFVectorDBConfig {
     collectionName: string;
@@ -34,6 +35,7 @@ class PDFVectorDB {
     private embeddings: AlibabaTongyiEmbeddings;
     private milvusClient: any;
     private textSplitter: RecursiveCharacterTextSplitter;
+    private pdfProcessor: EnhancedPDFProcessor;
 
     constructor(config: PDFVectorDBConfig) {
         this.config = {
@@ -54,12 +56,16 @@ class PDFVectorDB {
             chunkSize: this.config.chunkSize!,
             chunkOverlap: this.config.chunkOverlap!,
         });
+
+        // 初始化增强PDF处理器
+        this.pdfProcessor = new EnhancedPDFProcessor();
     }
 
     // 初始化milvus客户端
     async initMilvus() {
         this.milvusClient = milvusClient; // 直接使用全局实例
         console.log('Milvus客户端初始化成功');
+        console.log(111, this.milvusClient);
     }
 
     // 创建集合
@@ -96,32 +102,32 @@ class PDFVectorDB {
                     {
                         name: 'id',
                         description: '文档片段ID',
-                        data_type: 'Int64',
+                        data_type: DataType.Int64,
                         is_primary_key: true,
                         autoID: true,
                     },
                     {
                         name: 'vector',
                         description: '文本向量',
-                        data_type: 'FloatVector',
+                        data_type: DataType.FloatVector,
                         dim: this.config.dimension,
                     },
                     {
                         name: 'text',
                         description: '原始文本内容',
-                        data_type: 'VarChar',
+                        data_type: DataType.VarChar,
                         max_length: 65535,
                     },
                     {
                         name: 'source',
                         description: 'PDF文件路径',
-                        data_type: 'VarChar',
+                        data_type: DataType.VarChar,
                         max_length: 1000,
                     },
                     {
                         name: 'page',
                         description: '页码',
-                        data_type: 'Int64'
+                        data_type: DataType.Int64
                     }
                 ]
             });
@@ -139,9 +145,10 @@ class PDFVectorDB {
             const createIndexResult = await this.milvusClient.createIndex({
                 collection_name: this.config.collectionName,
                 field_name: 'vector',
-                index_type: IndexType.IVF_FLAT,
+                index_name: 'myindex',
+                index_type: IndexType.HNSW,
                 metric_type: MetricType.L2,
-                params: { nlist: 1024 }
+                params: { efConstruction: 10, M: 4 }
             });
 
             console.log('索引创建成功：', createIndexResult);
@@ -158,38 +165,22 @@ class PDFVectorDB {
 
     // 加载PDF文档
     async loadPDFDocuments(): Promise<Document[]> {
-        const pdfFiles = fs.readdirSync(this.config.pdfDirectory)
-            .filter(file => file.endsWith('.pdf'))
-            .map(file => path.join(this.config.pdfDirectory, file));
-
-        console.log(`找到了 ${pdfFiles.length} 个PDF文件`);
-
-        const allDocuments: Document[] = [];
-
-        for (const pdfFile of pdfFiles) {
-            try {
-                console.log(`正在处理: ${path.basename(pdfFile)}`);
-
-                const loader = new PDFLoader(pdfFile);
-                const docs = await loader.load();
-
-                // 为每个文档添加源文件信息
-                docs.forEach((doc, index) => {
-                    doc.metadata = {
-                        ...doc.metadata,
-                        source: pdfFile,
-                        fileName: path.basename(pdfFile),
-                        page: index + 1
-                    };
-                });
-
-                allDocuments.push(...docs);
-                console.log(`${path.basename(pdfFile)} 处理完成，共 ${docs.length} 页`);
-            } catch (error) {
-                console.error(`处理PDF文件 ${pdfFile} 失败:`, error);
+        console.log('🚀 开始加载PDF文档...');
+        
+        try {
+            const documents = await this.pdfProcessor.batchProcessPDFs(this.config.pdfDirectory);
+            
+            if (documents.length === 0) {
+                console.warn('⚠️  没有成功加载任何PDF文档');
+            } else {
+                console.log(`✅ PDF文档加载完成，总计 ${documents.length} 页`);
             }
+            
+            return documents;
+        } catch (error) {
+            console.error('❌ PDF文档加载失败:', error);
+            throw new Error(`PDF文档加载失败: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-        return allDocuments;
     }
 
     // 分割文档
@@ -211,23 +202,34 @@ class PDFVectorDB {
             const batch = texts.slice(i, i + batchSize);
             console.log(`处理批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(texts.length / batchSize)}`);
 
-            const batchEmbeddings = await this.embeddings.embedDocuments(batch);
+            try {
+                const batchEmbeddings = await this.embeddings.embedDocuments(batch);
 
-            // 确保向量是标准的number[]格式
-            const normalizedEmbeddings = batchEmbeddings.map(embedding =>
-                Array.isArray(embedding) ? embedding : Array.from(embedding)
-            );
-            embeddings.push(...normalizedEmbeddings);
+                // 确保向量是标准的number[]格式
+                const normalizedEmbeddings = batchEmbeddings.map(embedding => {
+                    if (Array.isArray(embedding)) {
+                        return embedding.map(val => Number(val));
+                    } else {
+                        return Array.from(embedding as any).map(val => Number(val));
+                    }
+                });
+                
+                embeddings.push(...normalizedEmbeddings);
 
-            // 避免延迟API限制
-            if (i + batchSize < texts.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // 避免API限制
+                if (i + batchSize < texts.length) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                console.error(`批次 ${Math.floor(i / batchSize) + 1} 生成嵌入向量失败:`, error);
+                throw error;
             }
         }
 
         console.log('嵌入向量生成完成');
         console.log('样本向量维度:', embeddings[0]?.length);
         console.log('样本向量类型:', typeof embeddings[0]?.[0]);
+        console.log('总向量数量:', embeddings.length);
 
         return embeddings;
     }
@@ -260,13 +262,13 @@ class PDFVectorDB {
                 throw error;
             }
         }
-        console.log('数据插入完成');
+        console.log('数据插入完成'); 
     }
 
     // 加载集合到内存
     async loadCollection() {
         try {
-            const loadResult = await this.milvusClient.loadCollection({
+            const loadResult = await this.milvusClient.loadCollectionSync({
                 collection_name: this.config.collectionName
             });
             console.log('集合加载成功:', loadResult);
@@ -278,7 +280,7 @@ class PDFVectorDB {
     }
 
     // 搜索相似相似
-    async searchSimilarDocuments(query: string, topK: number = 5) {
+    async searchSimilarDocuments(query: string, topK: number = 3) {
         try {
             // 生成查询向量
             const queryEmbedding = await this.embeddings.embedQuery(query);
@@ -298,9 +300,8 @@ class PDFVectorDB {
                 output_fields: ['text', 'source', 'page'],
                 limit: topK,
                 params: {
-                    index_type: IndexType.IVF_FLAT,
-                    metric_type: MetricType.L2,
-                    nprobe: 10
+                    index_type: "HNSW",
+                    metric_type: "L2",
                 }
             });
 
@@ -328,21 +329,26 @@ class PDFVectorDB {
                 throw new Error('没有找到PDF文档');
             }
 
+             // 7. 创建索引 (在插入数据前创建)
+             await this.createIndex();
+
+            // 8. 加载集合
+            await this.loadCollection();
+
             // 4. 分割文档
             const splitDocuments = await this.splitDocuments(documents);
 
             // 5. 生成嵌入向量
             const texts = splitDocuments.map(doc => doc.pageContent);
+            console.log(555, texts);
             const embeddings = await this.generateEmbeddings(texts);
+            console.log(5551111, embeddings);
 
             // 6. 插入数据
             await this.insertData(splitDocuments, embeddings);
 
-            // 7. 创建索引 (在插入数据前创建)
-            await this.createIndex();
+           
 
-            // 8. 加载集合
-            await this.loadCollection();
         } catch (error) {
             console.error('构建向量数据库失败:', error);
             throw error;
