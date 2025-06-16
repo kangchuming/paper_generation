@@ -1,13 +1,17 @@
-import { TavilySearch } from "@langchain/tavily";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
 import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
-import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
+import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
-import { tool } from "@langchain/core/tools"
-import PDFVectorDB from './pdfVectordb.js';
+import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
+import MilvusClient from '@zilliz/milvus2-sdk-node';
+import PDFVectorDB from './utils/pdfVectordb.js';
+import { vectorsData } from './Data.js';
 import { pull } from "langchain/hub";
-import { z } from "zod";
+import z from "zod";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
@@ -15,16 +19,68 @@ import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Embeddings } from "@langchain/core/embeddings";
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
-import { config } from './config/index.js';
-import { corsMiddleware } from './middleware/cors.js';
-import { vectorDBService } from './services/vectorDB.js';
-import routes from './routes/index.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import cors from 'cors';
+import OpenAI from 'openai';
+import dotenv from 'dotenv';
+
+
+interface StreamResponse {
+    content?: string;
+    error?: string;
+    isLastMessage?: boolean;
+}
+
+
+// TypeScript 中处理 ESM 的 __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 配置 dotenv
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+// 配置参数
+const config = {
+    collectionName: 'research_papers',
+    dimension: 1536,
+    pdfDirectory: "./table_tennis_papers", // PDF存放目录
+    chunkSize: 1500, // 文本块大小
+    chunkOverlap: 200 //块间重叠
+};
 
 // Express 应用配置
 const app = express();
 
+// CORS 配置
+const allowedOrigins = [
+    'https://paper-generation-client.vercel.app',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+];
+
+const corsOptions: cors.CorsOptions = {
+    origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('Blocked by CORS:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+
 // 中间件
-app.use(corsMiddleware);
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // 根路由
@@ -37,6 +93,39 @@ if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
     console.error('Missing required environment variables');
     process.exit(1);
 }
+
+const prompt_paper = `您是一位在学术写作领域极具权威性的专家，尤其擅长根据论文大纲创作顶尖水平的 SCI 论文。现需您为运动科学领域创作一篇高质量的 SCI 一区论文，具体要求如下：
+一、深度契合大纲
+仔细研读并透彻理解所提供的论文大纲，确保生成的论文内容与大纲架构和核心主题高度契合。论文的每一部分，从章节标题到段落内容，都应紧密围绕大纲展开，不得偏离大纲所设定的研究方向与论述重点。
+运用您深厚的学术功底和专业的语言表达能力，构建起一个科学、严谨且逻辑严密的论述体系。在阐述观点、分析问题和呈现研究成果时，务必保证语言的准确性和精炼性，避免出现模糊不清或表述不当的情况。无论是专业术语的运用，还是语句的组织，都要彰显学术论文的专业性。
+二、权威论据支撑
+广泛查阅并参考权威且前沿的学术文献，确保所引用的文献均为近五年内发表在运动科学领域核心期刊上的研究成果。这些文献将为论文提供坚实有力的论据支持，增强论文的可信度和说服力。文献的选择应涵盖经典研究以及最新的突破成果，全面展现领域内的研究动态。
+在论文中适当引用文献内容时，需准确标注出处，遵循 SCI 一区期刊的引用规范。同时，在论文末尾的参考文献部分，详细列出所有引用文献的完整信息，包括作者、题目、期刊名称、发表年份、卷号、页码等，确保参考文献格式统一、准确无误，便于读者查阅追溯。
+三、格式严格规范
+标题：设计一个精准恰当、能够高度概括论文核心内容的标题。标题应简洁明了，控制在合理字数范围内，同时具备足够的吸引力，能够在众多学术文献中脱颖而出，激发读者的兴趣。
+摘要：撰写一个全面准确的摘要，概括论文的研究目的、方法、主要结果和结论。摘要应具有独立性和自含性，让读者在不阅读全文的情况下，即可了解论文的关键信息。字数严格控制在 200 - 300 字左右，语言精炼，重点突出。
+引言：创作一段引人入胜的引言，阐述研究背景、目的和意义。通过对相关领域研究现状的系统回顾，梳理已有研究成果，明确指出当前研究的不足，从而自然流畅地引出本文的研究内容与创新点。引言部分应能够吸引读者的注意力，为后文的论述做好铺垫。
+正文 - 实验设计与实施：
+详细阐述实验的设计思路，包括实验对象的选择标准、样本量的确定依据、分组方式等。例如，若研究某种运动训练方法对运动员体能的影响，需说明选取特定运动员群体的原因，以及如何将其分为实验组和对照组。
+描述实验所采用的仪器设备及工具，精确说明其型号、规格以及在实验中的作用。如使用专业的运动监测设备，需介绍设备的品牌、功能特点以及如何确保数据采集的准确性。
+分步介绍实验的具体操作流程，包括运动训练的方案、数据采集的时间节点和方式等。例如，详细描述实验组接受的特殊训练内容、频率和时长，以及对照组的常规训练安排，同时说明在实验过程中如何收集运动员的体能数据、生理指标等。
+正文 - 实验结果与分析：
+以清晰、直观的图表（如柱状图、折线图、散点图等）展示实验数据，图表需标注清晰的坐标轴标签、图例等信息，确保读者能够快速理解数据所表达的含义。
+对实验数据进行深入分析，运用合适的统计方法（如方差分析、相关性分析等）验证研究假设，解释数据背后的科学意义。例如，通过数据分析说明实验组和对照组在体能指标上是否存在显著差异，以及这些差异与所研究的运动训练方法之间的关联。
+结合已有研究成果，对实验结果进行讨论和对比，分析本研究的优势与局限性，进一步凸显研究的创新性和价值。
+结论：对论文的研究成果进行深刻精炼的总结，强调研究的重要发现和贡献，明确阐述研究成果对运动科学领域理论和实践的推动作用。同时，客观、诚实地指出研究的局限性，如实验样本的局限性、研究方法的不足等，并基于此对未来该领域的研究方向提出具有前瞻性的展望与建议。结论应简洁明了，具有一定的启发性。
+参考文献：按照 SCI 一区期刊的格式要求，规范详尽地列出所有引用的参考文献。参考文献的格式应统一、准确，便于读者查阅。
+四、字数达标要求
+论文的总字数应达到 9000 字以上，不包括参考文献部分。请合理分配各部分字数，确保论文内容丰富且重点突出。实验设计与实施、实验结果与分析等核心部分应保证充足的篇幅，以充分展示研究的科学性和严谨性。
+五、性能指标
+论文内容与大纲的精准性和相关性应达到 95% 以上，确保所有内容都紧密围绕大纲展开，切实回答大纲所设定的研究问题。
+语言表达的流畅度和专业性需达到 90% 以上。使用规范的学术语言，避免口语化表达和语法错误，确保论文的语言质量符合 SCI 一区期刊的要求。句子结构合理，段落衔接自然，逻辑过渡顺畅。
+六、沟通与优化
+在开始创作前，若对大纲中的任何部分存在疑问或不明确之处，请及时向我提问，确保您完全理解大纲意图。这包括对研究问题的界定、实验设计的细节等方面的疑问。
+具备根据我提供的反馈进行精准修改和完善优化的能力，能够快速响应并调整论文内容，以满足不断变化的需求。无论是内容的增减、结构的调整还是语言的润色，都要能够高效完成。
+七、学术道德
+始终严格遵守学术道德和相关法律规范，坚决杜绝任何抄袭或剽窃他人成果的行为。确保论文的原创性，所有观点和内容均为独立创作或基于合法引用。引用他人成果时，需按照规范进行标注，尊重知识产权。
+请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。`;
 
 // 全局PDF向量数据库实例
 let globalPdfVectorDB: PDFVectorDB | null = null;
@@ -222,55 +311,14 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
         // 2. 构建优化的prompt
         const enhancedPrompt = buildAcademicPrompt(message, retrievalContext);
 
-        // 3. 构建网络搜索
-        const agentTools = [new TavilySearch({maxResults: 3})];
-        const toolNode = new ToolNode(agentTools);
-
-        // 4. 使用 LangChain ChatOpenAI 生成论文
-        const chatModel = new ChatOpenAI({
-            modelName: 'doubao-1-5-lite-32k-250115',
-            temperature: 0.7,
-            maxTokens: 8000,
-            streaming: true,
-            openAIApiKey: process.env.OPENAI_API_KEY,
-            configuration: {
-                baseURL: process.env.OPENAI_BASE_URL,
-            }
-        }).bindTools(agentTools);;
-
-        // 5. 决定是否继续流程
-        const shouldContinue = ({messages} : typeof MessagesAnnotation.State) => {
-             const lastMessage = messages[messages.length - 1] as AIMessage;
-
-             if(lastMessage.tool_calls?.length) {
-                return "tools";
-             }
-
-             return "__end__";
-        }
-
-        //  6. 定义调用model
-        const callModel = async(state: typeof MessagesAnnotation.State) => {
-            const response = await chatModel.invoke(state.messages);
-
-            return {messages: [response]};
-        }
-
-        // 7. 定义workflow
-        const workflow = new StateGraph(MessagesAnnotation)
-            .addNode("agent", callModel)
-            .addNode("tools", toolNode)
-            .addEdge("__start__", "agent")
-            .addEdge("tools", "agent")
-            .addConditionalEdges("agent", shouldContinue);
-
-        
-        // 8. 编译Langchain
-        const app = workflow.compile();
-        
+        console.log(333, enhancedPrompt);
 
         // 3. 调用大模型生成论文
-        const systemPrompt = `您是一位在学术写作领域极具权威性的专家，尤其擅长根据论文大纲创作顶尖水平的 SCI 论文。现需您为运动科学领域创作一篇高质量的 SCI 一区论文，具体要求如下：
+        const stream = await openai.chat.completions.create({
+            messages: [
+                {
+                    role: 'system',
+                    content: `您是一位在学术写作领域极具权威性的专家，尤其擅长根据论文大纲创作顶尖水平的 SCI 论文。现需您为运动科学领域创作一篇高质量的 SCI 一区论文，具体要求如下：
                     一、深度契合大纲
                     仔细研读并透彻理解所提供的论文大纲，确保生成的论文内容与大纲架构和核心主题高度契合。论文的每一部分，从章节标题到段落内容，都应紧密围绕大纲展开，不得偏离大纲所设定的研究方向与论述重点。
                     运用您深厚的学术功底和专业的语言表达能力，构建起一个科学、严谨且逻辑严密的论述体系。在阐述观点、分析问题和呈现研究成果时，务必保证语言的准确性和精炼性，避免出现模糊不清或表述不当的情况。无论是专业术语的运用，还是语句的组织，都要彰显学术论文的专业性。
@@ -304,25 +352,29 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
                     请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。
 
                     请根据用户需求和提供的参考资料，生成符合学术标准的高质量论文内容。`
-
-        const messages = [
-            new SystemMessage(systemPrompt),
-            new HumanMessage(enhancedPrompt)
-        ];
-
-        const stream = await chatModel.stream(messages)
+                },
+                {
+                    role: 'user',
+                    content: enhancedPrompt
+                }
+            ],
+            model: 'doubao-1-5-lite-32k-250115',
+            stream: true,
+            temperature: 0.7, // 适度的创造性
+            max_tokens: 8000,  // 确保足够的输出长度
+        });
 
         // 4. 流式返回结果
         for await (const chunk of stream) {
             if (isEnded) break;
 
-            const content = chunk.content || '';
+            const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
                 try {
                     if (!res.writableEnded) {
                         const response: StreamResponse = {
-                            content: typeof content === 'string' ? content : '',
-                            isLastMessage: false
+                            content,
+                            isLastMessage: chunk.choices[0].finish_reason === 'stop'
                         };
                         res.write(`data: ${JSON.stringify(response)}\n\n`);
                     } else {
@@ -418,11 +470,11 @@ if (!process.env.VERCEL) {
     const startServer = (port: number) => {
         const server = app.listen(port, async () => {
             console.log(`服务器正在运行在 http://localhost:${port}`);
-            
+
             // 初始化向量数据库
             console.log('正在初始化向量数据库...');
             try {
-                await vectorDBService.initialize();
+                await initializeVectorDB();
                 console.log('✅ 向量数据库初始化完成');
             } catch (error) {
                 console.error('❌ 向量数据库初始化失败:', error);
@@ -438,10 +490,11 @@ if (!process.env.VERCEL) {
         });
     };
 
-    startServer(config.server.port);
+    const initialPort = parseInt(process.env.PORT || '3000', 10);
+    startServer(initialPort);
 } else {
     // 在Vercel环境中也要初始化向量数据库
-    vectorDBService.initialize().catch((error) => {
+    initializeVectorDB().catch((error) => {
         console.error('Vercel环境向量数据库初始化失败:', error);
     });
 }
