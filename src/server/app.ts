@@ -1,12 +1,13 @@
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { TavilySearch } from "@langchain/tavily";
 import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
+import { tool } from "@langchain/core/tools"
 import PDFVectorDB from './pdfVectordb.js';
 import { pull } from "langchain/hub";
-import z from "zod";
+import { z } from "zod";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
@@ -120,7 +121,7 @@ async function initializeVectorDB() {
     }
 }
 
-  // OpenAI 客户端配置
+// OpenAI 客户端配置
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     baseURL: process.env.OPENAI_BASE_URL,
@@ -273,7 +274,11 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
         // 2. 构建优化的prompt
         const enhancedPrompt = buildAcademicPrompt(message, retrievalContext);
 
-        // 3. 使用 LangChain ChatOpenAI 生成论文
+        // 3. 构建网络搜索
+        const agentTools = [new TavilySearch({maxResults: 3})];
+        const toolNode = new ToolNode(agentTools);
+
+        // 4. 使用 LangChain ChatOpenAI 生成论文
         const chatModel = new ChatOpenAI({
             modelName: 'doubao-1-5-lite-32k-250115',
             temperature: 0.7,
@@ -283,7 +288,38 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
             configuration: {
                 baseURL: process.env.OPENAI_BASE_URL,
             }
-        });
+        }).bindTools(agentTools);;
+
+        // 5. 决定是否继续流程
+        const shouldContinue = ({messages} : typeof MessagesAnnotation.State) => {
+             const lastMessage = messages[messages.length - 1] as AIMessage;
+
+             if(lastMessage.tool_calls?.length) {
+                return "tools";
+             }
+
+             return "__end__";
+        }
+
+        //  6. 定义调用model
+        const callModel = async(state: typeof MessagesAnnotation.State) => {
+            const response = await chatModel.invoke(state.messages);
+
+            return {messages: [response]};
+        }
+
+        // 7. 定义workflow
+        const workflow = new StateGraph(MessagesAnnotation)
+            .addNode("agent", callModel)
+            .addNode("tools", toolNode)
+            .addEdge("__start__", "agent")
+            .addEdge("tools", "agent")
+            .addConditionalEdges("agent", shouldContinue);
+
+        
+        // 8. 编译Langchain
+        const app = workflow.compile();
+        
 
         // 3. 调用大模型生成论文
         const systemPrompt = `您是一位在学术写作领域极具权威性的专家，尤其擅长根据论文大纲创作顶尖水平的 SCI 论文。现需您为运动科学领域创作一篇高质量的 SCI 一区论文，具体要求如下：
@@ -320,13 +356,13 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
                     请根据以上要求，结合所提供的论文大纲，为我创作一篇高质量的 SCI 一区论文。这篇论文对我的工作至关重要，期待您能创作出符合要求的佳作。
 
                     请根据用户需求和提供的参考资料，生成符合学术标准的高质量论文内容。`
-        
-                    const messages = [
-                        new SystemMessage(systemPrompt),
-                        new HumanMessage(enhancedPrompt)
-                    ];
 
-                    const stream = await chatModel.stream(messages)
+        const messages = [
+            new SystemMessage(systemPrompt),
+            new HumanMessage(enhancedPrompt)
+        ];
+
+        const stream = await chatModel.stream(messages)
 
         // 4. 流式返回结果
         for await (const chunk of stream) {

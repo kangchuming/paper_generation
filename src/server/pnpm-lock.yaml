@@ -26,6 +26,9 @@ importers:
       '@langchain/openai':
         specifier: ^0.3.0
         version: 0.3.17(@langchain/core@0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63)))(ws@8.18.2)
+      '@langchain/tavily':
+        specifier: ^0.1.3
+        version: 0.1.3(@langchain/core@0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63)))
       '@langchain/textsplitters':
         specifier: ^0.1.0
         version: 0.1.0(@langchain/core@0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63)))
@@ -733,6 +736,12 @@ packages:
 
   '@langchain/openai@0.3.17':
     resolution: {integrity: sha512-uw4po32OKptVjq+CYHrumgbfh4NuD7LqyE+ZgqY9I/LrLc6bHLMc+sisHmI17vgek0K/yqtarI0alPJbzrwyag==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': ^0.3.0
+
+  '@langchain/tavily@0.1.3':
+    resolution: {integrity: sha512-lEbhhhGuAxkrbWYXWXsBN+8r2K7+aNeNP/bCGfhUoi5RdCQpCfqpsnXOx4f7du8FirFlwgUgNoW+bZbKRF5Pzg==}
     engines: {node: '>=18'}
     peerDependencies:
       '@langchain/core': ^0.3.0
@@ -2440,6 +2449,11 @@ snapshots:
       - encoding
       - ws
 
+  '@langchain/tavily@0.1.3(@langchain/core@0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63)))':
+    dependencies:
+      '@langchain/core': 0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63))
+      zod: 3.25.63
+
   '@langchain/textsplitters@0.1.0(@langchain/core@0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63)))':
     dependencies:
       '@langchain/core': 0.3.58(openai@4.104.0(ws@8.18.2)(zod@3.25.63))
@@ -2631,7 +2645,7 @@ snapshots:
   axios@1.9.0(debug@4.4.1):
     dependencies:
       follow-redirects: 1.15.9(debug@4.4.1)
-      form-data: 4.0.0
+      form-data: 4.0.3
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug
