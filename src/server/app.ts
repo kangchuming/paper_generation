@@ -4,6 +4,10 @@ import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/
 import { createRetrieverTool } from "langchain/tools/retriever";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation, Annotation, END } from "@langchain/langgraph";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import type { RunnableConfig } from "@langchain/core/runnables";
+import { formatDocumentsAsString } from "langchain/util/document";
+import { type DocumentInterface } from "@langchain/core/documents";
 import { tool } from "@langchain/core/tools"
 import PDFVectorDB from './pdfVectordb.js';
 import { pull } from "langchain/hub";
@@ -15,10 +19,21 @@ import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Embeddings } from "@langchain/core/embeddings";
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
+import path from 'path';
 import { config } from './config/index.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { vectorDBService } from './services/vectorDB.js';
+import OpenAI from 'openai';
+import dotenv from 'dotenv';
 import routes from './routes/index.js';
+import { BaseRetriever } from "@langchain/core/retrievers";
+
+// 类型定义
+interface StreamResponse {
+    content?: string;
+    error?: string;
+    isLastMessage?: boolean;
+}
 
 // Express 应用配置
 const app = express();
@@ -32,42 +47,82 @@ app.get('/', (_req: Request, res: Response) => {
     res.json({ message: 'API is running' });
 });
 
+dotenv.config();
+
+class PDFRetriever extends BaseRetriever {
+    lc_namespace = ["pdf", "retrievers"];
+
+    constructor(private pdfVectorDB: PDFVectorDB) {
+        super();
+    }
+
+    async _getRelevantDocuments(query: string): Promise<DocumentInterface[]> {
+        if(!this.pdfVectorDB) return [];
+
+        try {
+            const searchResults = await this.pdfVectorDB.searchSimilarDocuments(query, 5);
+
+            // 解析检索结果
+            const results = searchResults.results || [];
+
+            return results.map((result: any) => ({
+                pageContent: result.text || result.entity?.text || '',
+                metadata: {
+                    source: result.source || result.entity?.source || '',
+                    page: result.page || result.entity?.page || 0,
+                    score: result.score || result.distance || 0
+                }
+            }));
+        } catch(err) {
+            console.error('检索失败:', err);
+            return [];
+        }
+    }
+}
+
+// 全局PDF向量数据库实例
+let globalPdfVectorDB: PDFVectorDB | null = null;
+
+const retriever = globalPdfVectorDB ? new PDFRetriever(globalPdfVectorDB) : null;
+
+const model = new ChatOpenAI({
+    modelName: 'doubao-1-5-lite-32k-250115',
+    temperature: 0,
+    maxTokens: 8000,
+    streaming: true,
+    openAIApiKey: process.env.OPENAI_API_KEY,
+    configuration: {
+        baseURL: process.env.OPENAI_BASE_URL,
+    }
+})
+
+async function retrieve(
+    state: typeof GraphState.State,
+    config?: RunnableConfig
+): Promise<Partial<typeof GraphState.State>> {
+    console.log("---RETRIEVE---");
+
+    if(!retriever) {
+        return {documents: []};
+    }
+
+    const documents = await retriever
+        .withConfig({runName: "FetchRelevantDocuments"})
+        .invoke(state.question, config);
+    
+    return {
+        documents,
+    }
+    
+}
+
 // 环境变量检查
 if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_BASE_URL) {
     console.error('Missing required environment variables');
     process.exit(1);
 }
 
-// 全局PDF向量数据库实例
-let globalPdfVectorDB: PDFVectorDB | null = null;
 
-// 初始化向量数据库
-async function initializeVectorDB() {
-    try {
-        console.log('正在初始化向量数据库...');
-        globalPdfVectorDB = new PDFVectorDB(config);
-
-        // 初始化Milvus连接
-        await globalPdfVectorDB.initMilvus();
-
-        // 检查集合是否存在，如果不存在则构建向量数据库
-        try {
-            // 尝试执行一个简单的搜索来验证向量数据库是否已构建
-            await globalPdfVectorDB.searchSimilarDocuments('测试', 1);
-            console.log('✅ 向量数据库已存在且可用');
-        } catch (error) {
-            console.log('向量数据库不存在或不完整，开始构建...');
-            await globalPdfVectorDB.buildVectorDB();
-            console.log('✅ 向量数据库构建完成');
-        }
-
-        console.log('向量数据库初始化完成');
-    } catch (error) {
-        console.error('向量数据库初始化失败:', error);
-        // 不抛出错误，允许应用继续运行，但检索功能会不可用
-        globalPdfVectorDB = null;
-    }
-}
 
 // OpenAI 客户端配置
 const openai = new OpenAI({
@@ -170,6 +225,25 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
     });
 });
 
+const GraphState = Annotation.Root({
+    documents: Annotation<DocumentInterface[]>({
+        reducer: (x,y) => y ?? x ?? [],
+    }),
+    question: Annotation<string>({
+        reducer: (x,y) => y ?? x ?? "",
+    }),
+    generation: Annotation<string>({
+        reducer: (x, y) => y ?? x,
+        default: () => "",
+    }),
+    generationVQuestionGrade: Annotation<string>({
+        reducer: (x, y) => y ?? x,
+    }),
+    generationVDocumentsGrade: Annotation<string>({
+        reducer: (x, y) => y ?? x
+    })
+})
+
 // 增强的论文生成函数，集成检索结果
 async function generatePaperWithRetrieval(message: string, res: Response): Promise<void> {
     let isEnded = false;
@@ -219,6 +293,7 @@ async function generatePaperWithRetrieval(message: string, res: Response): Promi
             }
         }
 
+    
         // 2. 构建优化的prompt
         const enhancedPrompt = buildAcademicPrompt(message, retrievalContext);
 
