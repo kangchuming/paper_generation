@@ -1,9 +1,7 @@
 import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { MilvusClient } from "@zilliz/milvus2-sdk-node";
 import { Document } from "@langchain/core/documents";
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -40,8 +38,8 @@ class PDFVectorDB {
     constructor(config: PDFVectorDBConfig) {
         this.config = {
             milvusAddress: 'localhost:19530', // 移除冒号后的空格
-            chunkSize: 1000,
-            chunkOverlap: 200,
+            chunkSize: 400,
+            chunkOverlap: 100,
             ...config
         };
 
@@ -148,7 +146,7 @@ class PDFVectorDB {
                 index_name: 'myindex',
                 index_type: "HNSW",
                 metric_type: "IP",
-                params: { efConstruction: 10, M: 4 }
+                params: { efConstruction: 100, M: 24 }
             });
 
             console.log('索引创建成功：', createIndexResult);
