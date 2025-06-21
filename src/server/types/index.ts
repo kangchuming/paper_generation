@@ -18,14 +18,14 @@ export interface ChatRequest {
 
 export interface SearchResult {
     text?: string;
-    source?: string;
-    page?: number;
-    score?: number;
     entity?: {
         text?: string;
         source?: string;
         page?: number;
     };
+    source?: string;
+    page?: number;
+    score?: number;
     distance?: number;
 }
 
@@ -59,4 +59,19 @@ export interface EnhancedChatRequest extends ChatRequest {
     includeWebSearch?: boolean;
     searchQuery?: string;
     maxSearchResults?: number;
+}
+
+// 相关文档类型
+export interface RelevantDocument {
+    index: number;
+    content: string;
+    source: string;
+    page: number;
+    relevanceScore: number;
+}
+
+// 检索上下文类型
+export interface RetrievalContext {
+    documents: RelevantDocument[];
+    context: string;
 } 

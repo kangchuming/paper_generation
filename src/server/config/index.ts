@@ -21,8 +21,8 @@ export const config = {
         collectionName: 'research_papers',
         dimension: 1536,
         pdfDirectory: "./table_tennis_papers", // PDF存放目录
-        chunkSize: 1500, // 文本块大小
-        chunkOverlap: 200 //块间重叠
+        chunkSize: 350, // 文本块大小
+        chunkOverlap: 100 //块间重叠
     },
     
     // OpenAI 配置
@@ -30,8 +30,8 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY!,
         baseURL: process.env.OPENAI_BASE_URL!,
         model: 'doubao-1-5-lite-32k-250115',
-        temperature: 0.7,
-        maxTokens: 8000
+        temperature: 0.3,
+        maxTokens: 5000
     },
     
     // 服务器配置
