@@ -146,7 +146,7 @@ export async function generatePaperWithRetrieval(message: string, res: any): Pro
         // 8. 编译Langchain
         const app = workflow.compile();
 
-        // 3. 调用大模型生成论文
+        // 9. 准备初始消息
         const systemPrompt = `您是一位在学术写作领域极具权威性的专家，尤其擅长根据论文大纲创作顶尖水平的 SCI 论文。现需您为运动科学领域创作一篇高质量的 SCI 一区论文，具体要求如下：
                     一、深度契合大纲
                     仔细研读并透彻理解所提供的论文大纲，确保生成的论文内容与大纲架构和核心主题高度契合。论文的每一部分，从章节标题到段落内容，都应紧密围绕大纲展开，不得偏离大纲所设定的研究方向与论述重点。
@@ -186,14 +186,16 @@ export async function generatePaperWithRetrieval(message: string, res: any): Pro
             new SystemMessage(systemPrompt),
             new HumanMessage(enhancedPrompt)
         ];
+        const stream = await app.stream({messages}, {streamMode: "values"})
 
-        const stream = await chatModel.stream(messages)
-
-        // 4. 流式返回结果
+        // 11. 流式返回结果
         for await (const chunk of stream) {
             if (isEnded) break;
 
-            const content = chunk.content || '';
+            // const content = chunk.content || '';
+            const lastMessage = chunk?.messages[chunk.messages.length - 1];
+            const content = lastMessage?.content || '';
+            
             if (content) {
                 try {
                     if (!res.writableEnded) {
