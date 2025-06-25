@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { TavilySearch } from "@langchain/tavily";
 import { ChatOpenAI } from "@langchain/openai";
 import { MemorySaver } from "@langchain/langgraph";
 import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
@@ -31,7 +31,7 @@ export class OpenAIService {
         });
 
         // 2. 定义联网搜索工具
-        this.tools = [new TavilySearchResults({ maxResults: 5, searchDepth: 'basic' })];
+        this.tools = [new TavilySearch({ maxResults: 5, searchDepth: 'basic' })];
 
         // 3. 定义memory
         this.memory = new MemorySaver();

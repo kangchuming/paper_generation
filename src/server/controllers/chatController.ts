@@ -58,7 +58,7 @@ export class ChatController {
             for await (const chunk of stream) {
                 if (isEnded) break;
 
-                const content = chunk.choices[0]?.delta?.content || '';
+                const content = chunk?.messages?.[chunk.messages.length - 1];
                 if (content) {
                     try {
                         if (!res.writableEnded) {

@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { corsMiddleware } from './middleware/cors.js';
 import { config } from './config/index.js';
 import routes from './routes/index.js';
-import chatRoutes from './routes/chatRoutes.js';
 import { startServer, initializeVercel } from './utils/serverUtils.js';
 
 // 环境变量配置
@@ -29,8 +28,8 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // 路由配置
-app.use('/api/chat', chatRoutes);
-app.use('/api', routes);
+app.use('/api/chat', routes);
+// app.use('/api', routes);
 
 // 服务器启动逻辑
 if (!process.env.VERCEL) {
