@@ -7,9 +7,17 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
+import { debugLog } from '../utils/logger.js';
 
 export class PaperController {
     async streamPaper(req: Request, res: Response): Promise<void> {
+        debugLog('PAPER CONTROLLER CALLED!', {
+            body: req.body,
+            url: req.url,
+            method: req.method,
+            headers: req.headers
+        });
+        
         const { message } = req.body;
 
         res.setHeader('Content-Type', 'text/event-stream');
@@ -44,7 +52,11 @@ export class PaperController {
             console.log('Enhanced prompt built:', enhancedPrompt);
 
             // 3. 构建StateGraph工作流
-            const agentTools = [new TavilySearch({maxResults: 3})];
+            const agentTools = [new TavilySearch({
+                maxResults: 3,
+                includeAnswer: true,
+                includeRawContent: false
+            })];
             const toolNode = new ToolNode(agentTools);
 
             // 4. 使用 LangChain ChatOpenAI 生成论文
@@ -93,33 +105,40 @@ export class PaperController {
                 new HumanMessage(enhancedPrompt)
             ];
 
-            // 10. 使用StateGraph执行工作流
-            const stream = await app.stream({ messages }, { streamMode: "values" });
+            // 10. 使用StateGraph的流式处理
+            const stream = await app.streamEvents({ messages }, { version: "v2" });
 
-            // 11. 流式返回结果
+            // 11. 流式返回结果 - 监听特定事件
             for await (const chunk of stream) {
                 if (isEnded) break;
 
-                // StateGraph返回的是带有messages数组的对象
-                const lastMessage = chunk?.messages?.[chunk.messages.length - 1];
-                const content = lastMessage?.content || '';
-                
-                if (content) {
-                    try {
-                        if (!res.writableEnded) {
-                            const response: StreamResponse = {
-                                content: typeof content === 'string' ? content : '',
-                                isLastMessage: false
-                            };
-                            res.write(`data: ${JSON.stringify(response)}\n\n`);
-                        } else {
+                debugLog('Stream event', {
+                    event: chunk.event,
+                    name: chunk.name,
+                    data: chunk.data
+                });
+
+                // 只处理来自ChatOpenAI的流式输出
+                if(chunk.event === 'on_chat_model_stream' && chunk.name === "ChatOpenAI"){
+                    const content = chunk?.data?.chunk.content;
+
+                    if (content && typeof content === 'string') {
+                        try {
+                            if (!res.writableEnded) {
+                                const response: StreamResponse = {
+                                    content: content,
+                                    isLastMessage: false
+                                };
+                                res.write(`data: ${JSON.stringify(response)}\n\n`);
+                            } else {
+                                isEnded = true;
+                                break;
+                            }
+                        } catch (error) {
+                            console.error('写入数据时出错:', error);
                             isEnded = true;
                             break;
                         }
-                    } catch (error) {
-                        console.error('写入数据时出错:', error);
-                        isEnded = true;
-                        break;
                     }
                 }
             }

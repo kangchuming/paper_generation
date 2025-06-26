@@ -11,7 +11,7 @@ export async function fetchOutline(message: string) {
         // 在开始新的请求时清空内容
         updateInputVal(() => '');
 
-        await fetchEventSource(`${API_BASE_URL}/api/chat/genoutline`, {
+        await fetchEventSource(`${API_BASE_URL}/api/pre/genoutline`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
