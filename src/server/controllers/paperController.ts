@@ -61,7 +61,7 @@ export class PaperController {
 
             // 4. 使用 LangChain ChatOpenAI 生成论文
             const chatModel = new ChatOpenAI({
-                modelName: 'doubao-1-5-lite-32k-250115',
+                modelName: 'doubao-1.5-thinking-pro-m-250428',
                 temperature: 0.7,
                 maxTokens: 8000,
                 streaming: true,
