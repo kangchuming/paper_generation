@@ -168,7 +168,7 @@ const useStreamProcessor = () => {
 
     // 提取完整标题内容（从标记结尾到换行符）
     const titleContent = buffer.current.slice(start + marker.length, lineEnd).trim();
-
+    
     // 修改原有的内容结束位置查找逻辑  
     if (marker === '### ') {
       const contentEnd = buffer.current.indexOf('\n', lineEnd + 1);
@@ -176,6 +176,8 @@ const useStreamProcessor = () => {
       curIndexRef.current = contentEnd + 1;
 
       const content = buffer.current.slice(lineEnd, contentEnd).trim();
+      
+      
       processLine(`### ${titleContent}\n${content}`);
     } else if (marker === '## ') {
       processLine(`## ${titleContent}`);
@@ -187,6 +189,7 @@ const useStreamProcessor = () => {
   // 增强的 processChar 方法
   const processChar = (text: string) => {
     buffer.current = text;
+    
     const titlePattern = /^# /;
     const heading2Pattern = /(?:^|\n\n?)## /;  // 匹配开头或者一个或两个换行符后的 ##
     const heading3Pattern = /(?:^|\n)### /;  // 匹配开头或换行后的 ###
@@ -211,7 +214,6 @@ const useStreamProcessor = () => {
 const DragAndDropDemo = () => {
   const inputVal = useOutlineStore((state: State) => state.inputVal);  // 从 store 获取值
   const endOutlineMarker = useOutlineStore((state: State) => state.endOutlineMarker);
-  const [showBtn, setShowBtn] = useState<boolean>(false);
   const { article, processChar } = useStreamProcessor();
   const [items, setItems] = useState<DraggableItem[]>([]);
 
@@ -255,7 +257,7 @@ const DragAndDropDemo = () => {
           newItems.push({
             id: `section-${section.id}`,
             content: section.title,
-            description: section.content,
+            description: section.content.replace(/\*\*/g, ''),
             type: 'section',
             level: 2,
             originalIndex: sectionIndex,
@@ -268,7 +270,6 @@ const DragAndDropDemo = () => {
     convertToItems();
   }, [article])
 
-  // processChar(inputVal);
 
   useEffect(() => {
     if (inputVal) {
@@ -298,11 +299,11 @@ const DragAndDropDemo = () => {
                             newItems[index].content = e.target.value;
                             setItems(newItems);
                           }} />
-                          <TextArea rows={4} placeholder="请输入大纲具体描述" className={styles.section_content_item_context_content} autoSize={true} value={item.description} onChange={(e) => {
+                          {item.description && (<TextArea rows={4} placeholder="请输入大纲具体描述" className={styles.section_content_item_context_content} autoSize={true} value={item.description} onChange={(e) => {
                             const newItems = [...items];
                             newItems[index].description = e.target.value;
                             setItems(newItems)
-                          }} />
+                          }} />)}
                         </div>
                       </div>
                     )}
