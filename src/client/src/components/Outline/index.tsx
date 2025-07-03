@@ -168,14 +168,20 @@ const useStreamProcessor = () => {
 
     // 提取完整标题内容（从标记结尾到换行符）
     const titleContent = buffer.current.slice(start + marker.length, lineEnd).trim();
+    console.log('titleContent', titleContent);
+    
     
     // 修改原有的内容结束位置查找逻辑  
     if (marker === '### ') {
-      const contentEnd = buffer.current.indexOf('\n', lineEnd + 1);
+      const contentEnd = buffer.current.indexOf('\n\n', lineEnd + 1);
+      console.log('contentEnd', contentEnd);
+      
       if (contentEnd === -1) return;
       curIndexRef.current = contentEnd + 1;
 
       const content = buffer.current.slice(lineEnd, contentEnd).trim();
+      console.log('content', content);
+      
       
       
       processLine(`### ${titleContent}\n${content}`);
@@ -188,7 +194,7 @@ const useStreamProcessor = () => {
 
   // 增强的 processChar 方法
   const processChar = (text: string) => {
-    buffer.current = text;
+    buffer.current = text;   
     
     const titlePattern = /^# /;
     const heading2Pattern = /(?:^|\n\n?)## /;  // 匹配开头或者一个或两个换行符后的 ##
